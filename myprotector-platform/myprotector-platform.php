@@ -1,11 +1,11 @@
 <?php
 /**
  * Plugin Name: MyProtector Platform
- * Plugin URI: https://myprotector.example.com
- * Description: Trustpilot-style review platform for WordPress
+ * Plugin URI: https://myprotector.com
+ * Description: Trust verification platform for businesses - Protect, Verify, Trust. A comprehensive review and trust signal system for WordPress.
  * Version: 1.0.0
  * Author: MyProtector Team
- * Author URI: https://myprotector.example.com
+ * Author URI: https://myprotector.com
  * License: Proprietary
  * Text Domain: myprotector-platform
  * Domain Path: /languages

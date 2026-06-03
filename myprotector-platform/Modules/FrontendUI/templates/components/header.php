@@ -6,26 +6,31 @@
  */
 
 if (!defined('ABSPATH')) exit;
+
+$company_url = defined('MYPROTECTOR_COMPANY_URL') ? MYPROTECTOR_COMPANY_URL : home_url();
+$support_url = defined('MYPROTECTOR_SUPPORT_URL') ? MYPROTECTOR_SUPPORT_URL : home_url('/support');
+$dashboard_url = defined('MYPROTECTOR_COMPANY_URL') ? MYPROTECTOR_COMPANY_URL . '/dashboard' : home_url('/dashboard');
+$about_url = defined('MYPROTECTOR_COMPANY_URL') ? MYPROTECTOR_COMPANY_URL . '/about' : home_url('/about');
 ?>
 
 <header class="mp-header">
     <div class="mp-container">
         <div class="mp-header-inner">
-            <a href="#" class="mp-logo">
+            <a href="<?php echo esc_url($company_url); ?>" class="mp-logo">
                 <div class="mp-logo-icon">MP</div>
                 <div class="mp-logo-text">My<span>Protector</span></div>
             </a>
             
             <nav class="mp-nav">
-                <a href="#" class="mp-nav-link">Home</a>
-                <a href="#" class="mp-nav-link">Businesses</a>
-                <a href="#" class="mp-nav-link">How It Works</a>
-                <a href="#" class="mp-nav-link">Dashboard</a>
+                <a href="<?php echo esc_url($company_url); ?>" class="mp-nav-link">Home</a>
+                <a href="<?php echo esc_url($company_url); ?>/businesses" class="mp-nav-link">Businesses</a>
+                <a href="<?php echo esc_url($company_url); ?>/how-it-works" class="mp-nav-link">How It Works</a>
+                <a href="<?php echo esc_url($dashboard_url); ?>" class="mp-nav-link">Dashboard</a>
             </nav>
             
             <div class="mp-header-actions">
-                <a href="#" class="mp-btn mp-btn-ghost">Log In</a>
-                <a href="#" class="mp-btn mp-btn-primary">Sign Up</a>
+                <a href="<?php echo esc_url($company_url); ?>/login" class="mp-btn mp-btn-ghost">Log In</a>
+                <a href="<?php echo esc_url($company_url); ?>/register" class="mp-btn mp-btn-primary">Sign Up</a>
             </div>
             
             <!-- Mobile Menu Toggle -->
