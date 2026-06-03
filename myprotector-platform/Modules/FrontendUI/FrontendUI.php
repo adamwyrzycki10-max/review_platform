@@ -387,6 +387,16 @@ class FrontendUI extends Module {
         $this->addAction('wp_ajax_nopriv_mp_mark_helpful', [$this, 'handleMarkHelpful']);
         
         $this->addAction('wp_ajax_mp_respond_to_review', [$this, 'handleRespondToReview']);
+        
+        // Login/Signup AJAX handlers
+        $this->addAction('wp_ajax_mp_ajax_login', [$this, 'ajaxLogin']);
+        $this->addAction('wp_ajax_nopriv_mp_ajax_login', [$this, 'ajaxLogin']);
+        $this->addAction('wp_ajax_mp_ajax_register', [$this, 'ajaxRegister']);
+        $this->addAction('wp_ajax_nopriv_mp_ajax_register', [$this, 'ajaxRegister']);
+        $this->addAction('wp_ajax_mp_ajax_lost_password', [$this, 'ajaxLostPassword']);
+        $this->addAction('wp_ajax_nopriv_mp_ajax_lost_password', [$this, 'ajaxLostPassword']);
+        $this->addAction('wp_ajax_mp_ajax_reset_password', [$this, 'ajaxResetPassword']);
+        $this->addAction('wp_ajax_nopriv_mp_ajax_reset_password', [$this, 'ajaxResetPassword']);
     }
     /**
      * Render business profile page
@@ -910,10 +920,17 @@ class FrontendUI extends Module {
      * @return void
      */
     protected function registerShortcodes(): void {
+        // Main pages
         add_shortcode('mp_home', [$this, 'renderHomepage']);
         add_shortcode('mp_directory', [$this, 'renderDirectory']);
         add_shortcode('mp_business_profile', [$this, 'renderBusinessProfile']);
         add_shortcode('mp_dashboard', [$this, 'renderDashboard']);
+        
+        // Auth pages
+        add_shortcode('mp_login', [$this, 'renderLoginPage']);
+        add_shortcode('mp_register', [$this, 'renderRegisterPage']);
+        
+        // Widgets
         add_shortcode('mp_rating', [$this, 'renderRatingBadge']);
         add_shortcode('mp_reviews', [$this, 'renderReviewSummary']);
         add_shortcode('mp_trust', [$this, 'renderTrustWidget']);
@@ -951,6 +968,8 @@ class FrontendUI extends Module {
         );
 
         // Localize script
+        $company_url = defined('MYPROTECTOR_COMPANY_URL') ? MYPROTECTOR_COMPANY_URL : home_url();
+        
         wp_localize_script('mp-frontend-ui', 'mpFrontend', [
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('mp_frontend_nonce'),
@@ -959,6 +978,14 @@ class FrontendUI extends Module {
                 'error' => __('Something went wrong. Please try again.', 'myprotector-platform'),
                 'submitReview' => __('Submit Review', 'myprotector-platform'),
                 'searchPlaceholder' => __('Search businesses...', 'myprotector-platform'),
+            ],
+            'urls' => [
+                'home' => $company_url,
+                'dashboard' => $company_url . '/dashboard',
+                'login' => $company_url . '/login',
+                'register' => $company_url . '/register',
+                'businessProfile' => $company_url . '/business',
+                'about' => $company_url . '/about',
             ],
             'mockData' => $this->mock_data,
         ]);
@@ -1011,6 +1038,44 @@ class FrontendUI extends Module {
 
         ob_start();
         include $this->getPath('templates/dashboard.php');
+        return ob_get_clean();
+    }
+
+    /**
+     * Render login page
+     * 
+     * @param array $atts
+     * @return string
+     */
+    public function renderLoginPage(array $atts = []): string {
+        // If already logged in, redirect to dashboard
+        if (is_user_logged_in()) {
+            $company_url = defined('MYPROTECTOR_COMPANY_URL') ? MYPROTECTOR_COMPANY_URL : home_url();
+            wp_safe_redirect($company_url . '/dashboard');
+            exit;
+        }
+        
+        ob_start();
+        include $this->getPath('templates/login.php');
+        return ob_get_clean();
+    }
+
+    /**
+     * Render register page
+     * 
+     * @param array $atts
+     * @return string
+     */
+    public function renderRegisterPage(array $atts = []): string {
+        // If already logged in, redirect to dashboard
+        if (is_user_logged_in()) {
+            $company_url = defined('MYPROTECTOR_COMPANY_URL') ? MYPROTECTOR_COMPANY_URL : home_url();
+            wp_safe_redirect($company_url . '/dashboard');
+            exit;
+        }
+        
+        ob_start();
+        include $this->getPath('templates/register.php');
         return ob_get_clean();
     }
 
@@ -1228,5 +1293,209 @@ class FrontendUI extends Module {
         ob_start();
         include $this->getPath('templates/' . $template . '.php');
         return ob_get_clean();
+    }
+
+    /**
+     * AJAX Login handler
+     * 
+     * @return void
+     */
+    public function ajaxLogin(): void {
+        check_ajax_referer('mp_frontend_nonce', 'nonce');
+        
+        $creds = [
+            'user_login' => sanitize_text_field($_POST['username'] ?? ''),
+            'user_password' => sanitize_text_field($_POST['password'] ?? ''),
+            'remember' => isset($_POST['remember']) && $_POST['remember'] === 'true',
+        ];
+        
+        if (empty($creds['user_login']) || empty($creds['user_password'])) {
+            wp_send_json_error([
+                'message' => __('Please enter both username/email and password.', 'myprotector-platform'),
+            ]);
+        }
+        
+        $user = wp_signon($creds, is_ssl());
+        
+        if (is_wp_error($user)) {
+            wp_send_json_error([
+                'message' => $user->get_error_message() ?: __('Invalid login credentials.', 'myprotector-platform'),
+            ]);
+        }
+        
+        // Get redirect URL
+        $redirect = $_POST['redirect'] ?? '';
+        if (empty($redirect) || !wp_validate_redirect($redirect)) {
+            $company_url = defined('MYPROTECTOR_COMPANY_URL') ? MYPROTECTOR_COMPANY_URL : home_url();
+            $redirect = $company_url . '/dashboard';
+        }
+        
+        wp_send_json_success([
+            'message' => __('Login successful!', 'myprotector-platform'),
+            'redirect' => $redirect,
+            'user' => [
+                'id' => $user->ID,
+                'name' => $user->display_name,
+                'email' => $user->user_email,
+            ],
+        ]);
+    }
+
+    /**
+     * AJAX Register handler
+     * 
+     * @return void
+     */
+    public function ajaxRegister(): void {
+        check_ajax_referer('mp_frontend_nonce', 'nonce');
+        
+        $email = sanitize_email($_POST['email'] ?? '');
+        $username = sanitize_user($_POST['username'] ?? '');
+        $password = $_POST['password'] ?? '';
+        $first_name = sanitize_text_field($_POST['first_name'] ?? '');
+        $last_name = sanitize_text_field($_POST['last_name'] ?? '');
+        $user_type = sanitize_text_field($_POST['user_type'] ?? 'individual');
+        
+        // Validation
+        if (empty($email) || !is_email($email)) {
+            wp_send_json_error(['message' => __('Please enter a valid email address.', 'myprotector-platform')]);
+        }
+        
+        if (empty($username)) {
+            // Generate username from email
+            $username = sanitize_user(current(explode('@', $email)));
+        }
+        
+        // Check if username exists
+        if (username_exists($username)) {
+            $username = $username . '_' . wp_generate_password(4, false);
+        }
+        
+        if (empty($password) || strlen($password) < 8) {
+            wp_send_json_error(['message' => __('Password must be at least 8 characters.', 'myprotector-platform')]);
+        }
+        
+        if (email_exists($email)) {
+            wp_send_json_error(['message' => __('An account with this email already exists.', 'myprotector-platform')]);
+        }
+        
+        // Create user
+        $user_id = wp_create_user($username, $password, $email);
+        
+        if (is_wp_error($user_id)) {
+            wp_send_json_error(['message' => $user_id->get_error_message()]);
+        }
+        
+        // Update user meta
+        wp_update_user([
+            'ID' => $user_id,
+            'first_name' => $first_name,
+            'last_name' => $last_name,
+            'display_name' => trim($first_name . ' ' . $last_name) ?: $username,
+            'role' => $user_type === 'business' ? 'mp_business' : 'subscriber',
+        ]);
+        
+        // Auto login
+        wp_set_current_user($user_id);
+        wp_set_auth_cookie($user_id, true);
+        
+        // Get redirect URL
+        $redirect = $_POST['redirect'] ?? '';
+        if (empty($redirect) || !wp_validate_redirect($redirect)) {
+            $company_url = defined('MYPROTECTOR_COMPANY_URL') ? MYPROTECTOR_COMPANY_URL : home_url();
+            $redirect = $user_type === 'business' ? $company_url . '/business-dashboard' : $company_url . '/dashboard';
+        }
+        
+        wp_send_json_success([
+            'message' => __('Account created successfully!', 'myprotector-platform'),
+            'redirect' => $redirect,
+            'user' => [
+                'id' => $user_id,
+                'name' => $first_name ?: $username,
+                'email' => $email,
+            ],
+        ]);
+    }
+
+    /**
+     * AJAX Lost Password handler
+     * 
+     * @return void
+     */
+    public function ajaxLostPassword(): void {
+        check_ajax_referer('mp_frontend_nonce', 'nonce');
+        
+        $email = sanitize_email($_POST['email'] ?? '');
+        
+        if (empty($email) || !is_email($email)) {
+            wp_send_json_error(['message' => __('Please enter a valid email address.', 'myprotector-platform')]);
+        }
+        
+        $user = get_user_by('email', $email);
+        
+        if (!$user) {
+            // Don't reveal user doesn't exist for security
+            wp_send_json_success([
+                'message' => __('If an account exists with that email, a password reset link has been sent.', 'myprotector-platform'),
+            ]);
+        }
+        
+        // Generate reset key
+        $key = get_password_reset_key($user);
+        
+        if (is_wp_error($key)) {
+            wp_send_json_error(['message' => __('Unable to generate reset key. Please try again.', 'myprotector-platform')]);
+        }
+        
+        // Build reset URL
+        $company_url = defined('MYPROTECTOR_COMPANY_URL') ? MYPROTECTOR_COMPANY_URL : home_url();
+        $reset_url = $company_url . '/reset-password?key=' . $key . '&login=' . rawurlencode($user->user_login);
+        
+        // Send email (in production, use wp_mail() here)
+        // For now, just return success
+        wp_send_json_success([
+            'message' => __('If an account exists with that email, a password reset link has been sent.', 'myprotector-platform'),
+            'debug_url' => $reset_url, // Remove in production
+        ]);
+    }
+
+    /**
+     * AJAX Reset Password handler
+     * 
+     * @return void
+     */
+    public function ajaxResetPassword(): void {
+        check_ajax_referer('mp_frontend_nonce', 'nonce');
+        
+        $key = sanitize_text_field($_POST['key'] ?? '');
+        $login = sanitize_text_field($_POST['login'] ?? '');
+        $password = $_POST['password'] ?? '';
+        $confirm_password = $_POST['confirm_password'] ?? '';
+        
+        if (empty($key) || empty($login)) {
+            wp_send_json_error(['message' => __('Invalid reset key or login.', 'myprotector-platform')]);
+        }
+        
+        if (empty($password) || strlen($password) < 8) {
+            wp_send_json_error(['message' => __('Password must be at least 8 characters.', 'myprotector-platform')]);
+        }
+        
+        if ($password !== $confirm_password) {
+            wp_send_json_error(['message' => __('Passwords do not match.', 'myprotector-platform')]);
+        }
+        
+        $user = check_password_reset_key($key, $login);
+        
+        if (!$user || is_wp_error($user)) {
+            wp_send_json_error(['message' => __('Invalid or expired reset key.', 'myprotector-platform')]);
+        }
+        
+        // Reset password
+        reset_password($user, $password);
+        
+        wp_send_json_success([
+            'message' => __('Password reset successfully! You can now log in with your new password.', 'myprotector-platform'),
+            'redirect' => defined('MYPROTECTOR_COMPANY_URL') ? MYPROTECTOR_COMPANY_URL . '/login' : home_url('/login'),
+        ]);
     }
 }
