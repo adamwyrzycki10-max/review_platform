@@ -121,13 +121,15 @@ class Reviews extends Module {
      * @return void
      */
     protected function initHandlers(): void {
-        // Admin handlers
-        if (is_admin()) {
+        // Admin handlers - only instantiate when in admin context AND WP is loaded
+        if (is_admin() && function_exists('wp_get_current_user')) {
             $this->adminController = new Admin\ReviewsAdminController($this);
         }
         
-        // Public handlers
-        $this->publicController = new Public\ReviewsPublicController($this);
+        // Public handlers - only when frontend is being rendered
+        if (!wp_doing_ajax() || (isset($_REQUEST['action']) && strpos($_REQUEST['action'], 'mp_') === 0)) {
+            $this->publicController = new Public_\ReviewsPublicController($this);
+        }
     }
 
     /**

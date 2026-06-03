@@ -84,9 +84,6 @@ class MyProtector {
      * @return void
      */
     public function run(): void {
-        // Load plugin textdomain
-        $this->loadTextdomain();
-        
         // Register modules
         $this->registerModules();
         
@@ -97,14 +94,17 @@ class MyProtector {
             $this->bootstrap->initRestApi();
             $this->bootstrap->registerShortcodes();
         }
+        
+        // Load textdomain on init hook (must be at init or later)
+        add_action('init', [$this, 'loadTextdomainDelayed'], 1);
     }
 
     /**
-     * Load plugin textdomain
+     * Load plugin textdomain (delayed until init hook)
      * 
      * @return void
      */
-    protected function loadTextdomain(): void {
+    public function loadTextdomainDelayed(): void {
         if (function_exists('load_plugin_textdomain')) {
             load_plugin_textdomain(
                 'myprotector-platform',
@@ -131,7 +131,7 @@ class MyProtector {
             'MyProtector\\Modules\\WooCommerce\\WooCommerce',
             'MyProtector\\Modules\\Admin\\Admin',
             'MyProtector\\Modules\\FrontendUI\\FrontendUI',
-            'MyProtector\\Modules\\Trustignals\\TrustSignals',
+            'MyProtector\\Modules\\TrustSignals\\TrustSignals',
         ];
 
         foreach ($moduleClasses as $moduleClass) {

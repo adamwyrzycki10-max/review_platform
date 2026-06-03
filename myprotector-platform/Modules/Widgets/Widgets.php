@@ -47,7 +47,6 @@ class Widgets extends Module {
     public function boot(): void {
         $this->registerServices();
         $this->registerShortcodes();
-        $this->registerWidgets();
     }
 
     /**
@@ -57,6 +56,22 @@ class Widgets extends Module {
      */
     public function registerHooks(): void {
         $this->addAction('wp_enqueue_scripts', [$this, 'enqueueFrontendAssets']);
+        $this->addAction('widgets_init', [$this, 'registerWidgets']);
+    }
+
+    /**
+     * Register WordPress widgets on widgets_init hook
+     * 
+     * @return void
+     */
+    public function registerWidgets(): void {
+        if (!class_exists('\WP_Widget')) {
+            return;
+        }
+        
+        register_widget(new Widgets\RatingBadgeWidget());
+        register_widget(new Widgets\TrustSignalWidget());
+        register_widget(new Widgets\ReviewsListWidget());
     }
 
     /**
@@ -74,36 +89,12 @@ class Widgets extends Module {
      * @return void
      */
     protected function registerShortcodes(): void {
-        // Rating Badge: [mp_rating id="123"]
         add_shortcode('mp_rating', [$this, 'renderRatingBadge']);
-        
-        // Review Carousel: [mp_reviews id="123" limit="5"]
         add_shortcode('mp_reviews', [$this, 'renderReviewCarousel']);
-        
-        // Traffic Signal Badge: [mp_trust id="123"]
         add_shortcode('mp_trust', [$this, 'renderTrustBadge']);
-        
-        // Combined Widget: [mp_widget id="123" type="full"]
         add_shortcode('mp_widget', [$this, 'renderCombinedWidget']);
-        
-        // Mini Badge: [mp_mini_rating id="123"]
         add_shortcode('mp_mini_rating', [$this, 'renderMiniRating']);
-        
-        // Reviews Slider: [mp_slider id="123"]
         add_shortcode('mp_slider', [$this, 'renderReviewsSlider']);
-    }
-
-    /**
-     * Register WordPress widgets
-     * 
-     * @return void
-     */
-    protected function registerWidgets(): void {
-        add_action('widgets_init', function() {
-            register_widget(new Widgets\RatingBadgeWidget());
-            register_widget(new Widgets\TrustSignalWidget());
-            register_widget(new Widgets\ReviewsListWidget());
-        });
     }
 
     /**
