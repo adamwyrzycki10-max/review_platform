@@ -376,56 +376,6 @@ class FrontendUI extends Module {
         
         $this->addAction('wp_ajax_mp_respond_to_review', [$this, 'handleRespondToReview']);
     }
-
-    /**
-     * Register shortcodes
-     * 
-     * @return void
-     */
-    protected function registerShortcodes(): void {
-        add_shortcode('mp_business_profile', [$this, 'renderBusinessProfile']);
-        add_shortcode('mp_business_list', [$this, 'renderBusinessList']);
-        add_shortcode('mp_reviews', [$this, 'renderReviewsList']);
-        add_shortcode('mp_trust_signal', [$this, 'renderTrustSignal']);
-        add_shortcode('mp_rating_badge', [$this, 'renderRatingBadge']);
-        add_shortcode('mp_search', [$this, 'renderSearch']);
-    }
-
-    /**
-     * Enqueue frontend assets
-     * 
-     * @return void
-     */
-    public function enqueueAssets(): void {
-        // Register styles
-        wp_register_style(
-            'mp-frontend-ui',
-            $this->getUrl('assets/css/frontend.css'),
-            [],
-            $this->version
-        );
-
-        // Register scripts
-        wp_register_script(
-            'mp-frontend-ui',
-            $this->getUrl('assets/js/frontend.js'),
-            ['jquery'],
-            $this->version,
-            true
-        );
-
-        // Localize script
-        wp_localize_script('mp-frontend-ui', 'mpFrontend', [
-            'ajaxUrl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('mp_frontend_nonce'),
-            'strings' => [
-                'submitting' => __('Submitting...', 'myprotector-platform'),
-                'submitted' => __('Review submitted!', 'myprotector-platform'),
-                'error' => __('An error occurred. Please try again.', 'myprotector-platform'),
-            ],
-        ]);
-    }
-
     /**
      * Render business profile page
      * 
@@ -635,33 +585,7 @@ class FrontendUI extends Module {
         ]);
     }
 
-    /**
-     * Render rating badge widget
-     * 
-     * @param array $atts
-     * @return string
-     */
-    public function renderRatingBadge(array $atts = []): string {
-        $atts = shortcode_atts([
-            'business_id' => 0,
-            'style' => 'compact',
-            'size' => 'medium',
-        ], $atts);
-
-        if (empty($atts['business_id'])) {
-            return '';
-        }
-
-        $business = $this->businessModel->get((int) $atts['business_id']);
-        
-        if (!$business) {
-            return '';
-        }
-
-        ob_start();
-        include $this->getPath('templates/components/rating-badge.php');
-        return ob_get_clean();
-    }
+    
 
     /**
      * Render search widget
@@ -710,87 +634,6 @@ class FrontendUI extends Module {
         <?php
         return ob_get_clean();
     }
-
-    /**
-     * Handle review modal AJAX
-     * 
-     * @return void
-     */
-    public function handleReviewModal(): void {
-        check_ajax_referer('mp_frontend_nonce', 'nonce');
-        
-        $business_id = isset($_POST['business_id']) ? (int) $_POST['business_id'] : 0;
-        
-        if (!$business_id) {
-            wp_send_json_error(['message' => __('Invalid business.', 'myprotector-platform')]);
-        }
-
-        $business = $this->businessModel->get($business_id);
-        
-        if (!$business) {
-            wp_send_json_error(['message' => __('Business not found.', 'myprotector-platform')]);
-        }
-
-        ob_start();
-        include $this->getPath('templates/components/review-modal.php');
-        $html = ob_get_clean();
-        
-        wp_send_json_success(['html' => $html]);
-    }
-
-    /**
-     * Handle search AJAX
-     * 
-     * @return void
-     */
-    public function handleSearch(): void {
-        check_ajax_referer('mp_frontend_nonce', 'nonce');
-        
-        $query = isset($_POST['query']) ? sanitize_text_field($_POST['query']) : '';
-        $category = isset($_POST['category']) ? sanitize_text_field($_POST['category']) : '';
-        $rating = isset($_POST['rating']) ? (float) $_POST['rating'] : 0;
-        $trust = isset($_POST['trust']) ? sanitize_text_field($_POST['trust']) : '';
-        
-        // Get businesses from database
-        $args = [
-            'search' => $query,
-            'limit' => 20,
-        ];
-        
-        if (!empty($category)) {
-            $args['category_id'] = (int) $category;
-        }
-        
-        if ($rating > 0) {
-            $args['min_rating'] = $rating;
-        }
-        
-        if (!empty($trust)) {
-            $args['trust_status'] = $trust;
-        }
-
-        $businesses = $this->businessModel->getAllActive($args);
-        
-        // Get HTML for cards
-        ob_start();
-        foreach ($businesses as $business) {
-            $signal = $this->trafficService->getSignal($business->business_id);
-            $location_parts = array_filter([$business->city, $business->state]);
-            $location = implode(', ', $location_parts);
-            include $this->getPath('templates/components/business-card.php');
-        }
-        $cards_html = ob_get_clean();
-        
-        if (empty($cards_html)) {
-            $cards_html = '<p class="mp-no-results">No businesses found matching your criteria.</p>';
-        }
-        
-        wp_send_json_success([
-            'html' => $cards_html,
-            'count' => count($businesses),
-        ]);
-    }
-
     /**
      * Handle review submission AJAX
      * 
@@ -1048,19 +891,6 @@ class FrontendUI extends Module {
         return $ip;
     }
 
-    /**
-     * Get template part
-     * 
-     * @param string $template
-     * @param array $data
-     * @return string
-     */
-    public function getTemplatePart(string $template, array $data = []): string {
-        extract($data);
-        ob_start();
-        include $this->getPath('templates/' . $template . '.php');
-        return ob_get_clean();
-    }
 
     /**
      * Register shortcodes
@@ -1155,51 +985,7 @@ class FrontendUI extends Module {
         return ob_get_clean();
     }
 
-    /**
-     * Render business profile page
-     * 
-     * @param array $atts
-     * @return string
-     */
-    public function renderBusinessProfile(array $atts = []): string {
-        $atts = shortcode_atts([
-            'id' => 0,
-            'slug' => '',
-        ], $atts);
-
-        // Get business from mock data
-        $business = null;
-        if (!empty($atts['id'])) {
-            foreach ($this->mock_data['businesses'] as $b) {
-                if ($b['id'] == $atts['id']) {
-                    $business = $b;
-                    break;
-                }
-            }
-        } elseif (!empty($atts['slug'])) {
-            foreach ($this->mock_data['businesses'] as $b) {
-                if ($b['slug'] == $atts['slug']) {
-                    $business = $b;
-                    break;
-                }
-            }
-        }
-
-        // Default to first business if none specified
-        if (!$business) {
-            $business = $this->mock_data['businesses'][0];
-        }
-
-        // Get reviews for this business
-        $reviews = array_filter($this->mock_data['reviews'], function($r) use ($business) {
-            return $r['business_id'] == $business['id'];
-        });
-
-        ob_start();
-        include $this->getPath('templates/business.php');
-        return ob_get_clean();
-    }
-
+  
     /**
      * Render dashboard
      * 
