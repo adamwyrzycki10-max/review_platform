@@ -214,19 +214,22 @@ if (!defined('ABSPATH')) exit;
                                 [
                                     'icon' => '🛡️',
                                     'label' => 'Insurance',
-                                    'url' => $business['insurance_url'],
+                                    'name' => $business['insurance_name'] ?? '',
+                                    'url' => $business['insurance_url'] ?? '',
                                     'status' => !empty($business['insurance_url']),
                                 ],
                                 [
                                     'icon' => '📄',
                                     'label' => 'Terms & Conditions',
-                                    'url' => $business['terms_url'],
+                                    'name' => '',
+                                    'url' => $business['terms_url'] ?? '',
                                     'status' => !empty($business['terms_url']),
                                 ],
                                 [
                                     'icon' => '✅',
                                     'label' => 'Promise Page',
-                                    'url' => $business['promise_url'],
+                                    'name' => $business['promise_title'] ?? '',
+                                    'url' => $business['promise_url'] ?? '',
                                     'status' => !empty($business['promise_url']),
                                 ],
                             ];
@@ -237,7 +240,12 @@ if (!defined('ABSPATH')) exit;
                                 <div class="mp-flex mp-items-center mp-justify-between">
                                     <div class="mp-flex mp-items-center mp-gap-sm">
                                         <span style="font-size: 18px;"><?php echo $link['icon']; ?></span>
-                                        <span style="color: var(--mp-gray-700);"><?php echo esc_html($link['label']); ?></span>
+                                        <div>
+                                            <span style="color: var(--mp-gray-700);"><?php echo esc_html($link['label']); ?></span>
+                                            <?php if (!empty($link['name'])): ?>
+                                            <span style="color: var(--mp-gray-500); font-size: var(--mp-font-size-xs);"> (<?php echo esc_html($link['name']); ?>)</span>
+                                            <?php endif; ?>
+                                        </div>
                                     </div>
                                     <?php if ($link['status']): ?>
                                     <a href="<?php echo esc_url($link['url']); ?>" target="_blank" rel="noopener noreferrer" class="mp-btn mp-btn-sm mp-btn-ghost">
