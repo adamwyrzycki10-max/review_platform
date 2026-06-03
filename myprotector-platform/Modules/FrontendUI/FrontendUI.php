@@ -2,7 +2,7 @@
 /**
  * MyProtector Platform - Frontend UI Module
  * 
- * Frontend UI components and templates for the MyProtector Platform
+ * Frontend UI components with real database integration
  * 
  * @package MyProtector\Modules\FrontendUI
  * @version 1.0.0
@@ -11,6 +11,9 @@
 namespace MyProtector\Modules\FrontendUI;
 
 use MyProtector\Core\Module;
+use MyProtector\Models\ReviewModel;
+use MyProtector\Models\BusinessModel;
+use MyProtector\Services\TrafficSignal\TrafficSignalService;
 
 class FrontendUI extends Module {
     /**
@@ -25,14 +28,28 @@ class FrontendUI extends Module {
      * 
      * @var array
      */
-    protected $dependencies = [];
+    protected $dependencies = ['reviews', 'business-profiles', 'traffic-signals'];
 
     /**
-     * Mock data for frontend
+     * Review model
      * 
-     * @var array
+     * @var ReviewModel
      */
-    protected $mock_data = [];
+    protected $reviewModel;
+
+    /**
+     * Business model
+     * 
+     * @var BusinessModel
+     */
+    protected $businessModel;
+
+    /**
+     * Traffic signal service
+     * 
+     * @var TrafficSignalService
+     */
+    protected $trafficService;
 
     /**
      * Get module directory
@@ -49,8 +66,12 @@ class FrontendUI extends Module {
      * @return void
      */
     public function boot(): void {
-        error_log('FrontendUI booted');
-        $this->initMockData();
+        // Initialize models
+        $this->reviewModel = new ReviewModel();
+        $this->businessModel = new BusinessModel();
+        $this->trafficService = new TrafficSignalService();
+
+        // Register shortcodes
         $this->registerShortcodes();
     }
 
@@ -63,42 +84,710 @@ class FrontendUI extends Module {
         // Enqueue frontend assets
         $this->addAction('wp_enqueue_scripts', [$this, 'enqueueAssets']);
         
-        // AJAX handlers for modal interactions
+        // AJAX handlers
         $this->addAction('wp_ajax_mp_open_review_modal', [$this, 'handleReviewModal']);
         $this->addAction('wp_ajax_nopriv_mp_open_review_modal', [$this, 'handleReviewModal']);
         
-        // AJAX for business search (UI only)
         $this->addAction('wp_ajax_mp_search_businesses', [$this, 'handleSearch']);
         $this->addAction('wp_ajax_nopriv_mp_search_businesses', [$this, 'handleSearch']);
+        
+        $this->addAction('wp_ajax_mp_submit_review', [$this, 'handleSubmitReview']);
+        $this->addAction('wp_ajax_nopriv_mp_submit_review', [$this, 'handleSubmitReview']);
+        
+        $this->addAction('wp_ajax_mp_get_business_reviews', [$this, 'handleGetReviews']);
+        $this->addAction('wp_ajax_nopriv_mp_get_business_reviews', [$this, 'handleGetReviews']);
+        
+        $this->addAction('wp_ajax_mp_mark_helpful', [$this, 'handleMarkHelpful']);
+        $this->addAction('wp_ajax_nopriv_mp_mark_helpful', [$this, 'handleMarkHelpful']);
+        
+        $this->addAction('wp_ajax_mp_respond_to_review', [$this, 'handleRespondToReview']);
     }
 
     /**
-     * Initialize mock data
+     * Register shortcodes
      * 
      * @return void
      */
-    protected function initMockData(): void {
-        $this->mock_data = [
-            'businesses' => [
-                [
-                    'id' => 1,
-                    'name' => 'TechVentures Solutions',
-                    'slug' => 'techventures-solutions',
-                    'logo' => 'https://ui-avatars.com/api/?name=TV&background=0A1F44&color=fff&size=128',
-                    'description' => 'Leading technology consulting firm specializing in digital transformation and cloud solutions for enterprise clients.',
-                    'website' => 'https://techventures.example.com',
-                    'rating' => 4.8,
-                    'total_reviews' => 247,
-                    'trust_status' => 'green',
-                    'trust_score' => 100,
-                    'category' => 'Technology',
-                    'location' => 'San Francisco, CA',
-                    'claimed' => true,
-                    'insurance_url' => 'https://example.com/insurance',
-                    'terms_url' => 'https://example.com/terms',
-                    'promise_url' => 'https://example.com/promise',
-                    'established' => 2015,
-                ],
+    protected function registerShortcodes(): void {
+        add_shortcode('mp_business_profile', [$this, 'renderBusinessProfile']);
+        add_shortcode('mp_business_list', [$this, 'renderBusinessList']);
+        add_shortcode('mp_reviews', [$this, 'renderReviewsList']);
+        add_shortcode('mp_trust_signal', [$this, 'renderTrustSignal']);
+        add_shortcode('mp_rating_badge', [$this, 'renderRatingBadge']);
+        add_shortcode('mp_search', [$this, 'renderSearch']);
+    }
+
+    /**
+     * Enqueue frontend assets
+     * 
+     * @return void
+     */
+    public function enqueueAssets(): void {
+        // Register styles
+        wp_register_style(
+            'mp-frontend-ui',
+            $this->getUrl('assets/css/frontend.css'),
+            [],
+            $this->version
+        );
+
+        // Register scripts
+        wp_register_script(
+            'mp-frontend-ui',
+            $this->getUrl('assets/js/frontend.js'),
+            ['jquery'],
+            $this->version,
+            true
+        );
+
+        // Localize script
+        wp_localize_script('mp-frontend-ui', 'mpFrontend', [
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('mp_frontend_nonce'),
+            'strings' => [
+                'submitting' => __('Submitting...', 'myprotector-platform'),
+                'submitted' => __('Review submitted!', 'myprotector-platform'),
+                'error' => __('An error occurred. Please try again.', 'myprotector-platform'),
+            ],
+        ]);
+    }
+
+    /**
+     * Render business profile page
+     * 
+     * @param array $atts
+     * @return string
+     */
+    public function renderBusinessProfile(array $atts = []): string {
+        $atts = shortcode_atts([
+            'id' => 0,
+            'slug' => '',
+        ], $atts);
+
+        // Get business from database
+        $business = null;
+        if (!empty($atts['id'])) {
+            $business = $this->businessModel->get((int) $atts['id']);
+        } elseif (!empty($atts['slug'])) {
+            $business = $this->businessModel->getBySlug($atts['slug']);
+        }
+
+        if (!$business) {
+            return '<div class="mp-error">' . __('Business not found.', 'myprotector-platform') . '</div>';
+        }
+
+        // Get traffic signal
+        $signal = $this->trafficService->getSignal($business->business_id);
+        $signal_data = $signal ? $this->trafficService->getSignalData($signal, true) : [];
+
+        // Get approved reviews
+        $reviews = $this->reviewModel->getByBusiness($business->business_id, [
+            'status' => 'approved',
+            'orderby' => 'published_at',
+            'order' => 'DESC',
+            'limit' => 20,
+        ]);
+
+        // Enqueue assets
+        wp_enqueue_style('mp-frontend-ui');
+        wp_enqueue_script('mp-frontend-ui');
+
+        // Get categories
+        $categories = $this->businessModel->getCategories($business->business_id);
+        $category_name = !empty($categories) ? $categories[0]->name : '';
+
+        // Build location string
+        $location_parts = array_filter([
+            $business->city,
+            $business->state,
+        ]);
+        $location = implode(', ', $location_parts);
+
+        ob_start();
+        include $this->getPath('templates/business.php');
+        return ob_get_clean();
+    }
+
+    /**
+     * Render business list/directory
+     * 
+     * @param array $atts
+     * @return string
+     */
+    public function renderBusinessList(array $atts = []): string {
+        $atts = shortcode_atts([
+            'category' => '',
+            'limit' => 12,
+            'orderby' => 'avg_rating',
+            'order' => 'DESC',
+            'show_filters' => 'true',
+        ], $atts);
+
+        // Get businesses from database
+        $businesses = $this->businessModel->getAllActive([
+            'category_id' => !empty($atts['category']) ? (int) $atts['category'] : null,
+            'orderby' => $atts['orderby'],
+            'order' => $atts['order'],
+            'limit' => (int) $atts['limit'],
+        ]);
+
+        // Enqueue assets
+        wp_enqueue_style('mp-frontend-ui');
+        wp_enqueue_script('mp-frontend-ui');
+
+        ob_start();
+        include $this->getPath('templates/directory.php');
+        return ob_get_clean();
+    }
+
+    /**
+     * Render reviews list for a business
+     * 
+     * @param array $atts
+     * @return string
+     */
+    public function renderReviewsList(array $atts = []): string {
+        $atts = shortcode_atts([
+            'business_id' => 0,
+            'limit' => 10,
+            'sort' => 'recent',
+        ], $atts);
+
+        if (empty($atts['business_id'])) {
+            return '';
+        }
+
+        // Determine sort order
+        $orderby = 'published_at';
+        $order = 'DESC';
+        switch ($atts['sort']) {
+            case 'highest':
+                $orderby = 'review_rating';
+                $order = 'DESC';
+                break;
+            case 'lowest':
+                $orderby = 'review_rating';
+                $order = 'ASC';
+                break;
+            case 'helpful':
+                $orderby = 'helpful_count';
+                $order = 'DESC';
+                break;
+        }
+
+        $reviews = $this->reviewModel->getByBusiness((int) $atts['business_id'], [
+            'status' => 'approved',
+            'orderby' => $orderby,
+            'order' => $order,
+            'limit' => (int) $atts['limit'],
+        ]);
+
+        ob_start();
+        echo '<div class="mp-reviews-list">';
+        foreach ($reviews as $review) {
+            $reviewer = get_userdata($review->user_id);
+            $avatar = get_avatar_url($review->user_id, ['size' => 48]);
+            $reviewer_name = $reviewer ? $reviewer->display_name : __('Anonymous', 'myprotector-platform');
+            $date = $review->published_at ? date_i18n('F j, Y', strtotime($review->published_at)) : '';
+            
+            // Get response if exists
+            $responses = $this->reviewModel->getResponses($review->review_id);
+            ?>
+            <div class="mp-review-card" data-review-id="<?php echo esc_attr($review->review_id); ?>">
+                <div class="mp-review-header">
+                    <img src="<?php echo esc_url($avatar); ?>" alt="" class="mp-review-avatar">
+                    <div class="mp-review-meta">
+                        <div class="mp-review-reviewer">
+                            <?php echo esc_html($reviewer_name); ?>
+                            <?php if ($review->trust_level === 'verified'): ?>
+                            <span class="mp-review-verified">✓ Verified</span>
+                            <?php endif; ?>
+                        </div>
+                        <div class="mp-review-date"><?php echo esc_html($date); ?></div>
+                    </div>
+                    <div class="mp-rating">
+                        <?php echo $this->renderStars($review->review_rating); ?>
+                    </div>
+                </div>
+                
+                <h4 class="mp-review-title"><?php echo esc_html($review->review_title); ?></h4>
+                <p class="mp-review-content"><?php echo esc_html($review->review_content); ?></p>
+                
+                <?php if (!empty($responses)): ?>
+                <div class="mp-review-responses">
+                    <?php foreach ($responses as $response): ?>
+                    <div class="mp-review-response">
+                        <strong><?php echo esc_html($response->responder_name ?? 'Business'); ?></strong>
+                        <p><?php echo esc_html($response->response_content); ?></p>
+                    </div>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+                
+                <div class="mp-review-footer">
+                    <button class="mp-review-helpful-btn" data-review-id="<?php echo esc_attr($review->review_id); ?>">
+                        <span>👍</span>
+                        <span>Helpful</span>
+                        <span class="mp-helpful-count">(<?php echo esc_html($review->helpful_count); ?>)</span>
+                    </button>
+                </div>
+            </div>
+            <?php
+        }
+        echo '</div>';
+        return ob_get_clean();
+    }
+
+    /**
+     * Render trust signal widget
+     * 
+     * @param array $atts
+     * @return string
+     */
+    public function renderTrustSignal(array $atts = []): string {
+        $atts = shortcode_atts([
+            'business_id' => 0,
+            'style' => 'standard',
+            'show_checklist' => 'true',
+        ], $atts);
+
+        if (empty($atts['business_id'])) {
+            return '';
+        }
+
+        return $this->trafficService->render((int) $atts['business_id'], [
+            'style' => $atts['style'],
+            'show_checklist' => $atts['show_checklist'] === 'true',
+        ]);
+    }
+
+    /**
+     * Render rating badge widget
+     * 
+     * @param array $atts
+     * @return string
+     */
+    public function renderRatingBadge(array $atts = []): string {
+        $atts = shortcode_atts([
+            'business_id' => 0,
+            'style' => 'compact',
+            'size' => 'medium',
+        ], $atts);
+
+        if (empty($atts['business_id'])) {
+            return '';
+        }
+
+        $business = $this->businessModel->get((int) $atts['business_id']);
+        
+        if (!$business) {
+            return '';
+        }
+
+        ob_start();
+        include $this->getPath('templates/components/rating-badge.php');
+        return ob_get_clean();
+    }
+
+    /**
+     * Render search widget
+     * 
+     * @param array $atts
+     * @return string
+     */
+    public function renderSearch(array $atts = []): string {
+        $atts = shortcode_atts([
+            'placeholder' => 'Search businesses...',
+            'show_category_filter' => 'true',
+        ], $atts);
+
+        wp_enqueue_style('mp-frontend-ui');
+        wp_enqueue_script('mp-frontend-ui');
+
+        ob_start();
+        ?>
+        <div class="mp-search-widget" data-show-category="<?php echo esc_attr($atts['show_category_filter']); ?>">
+            <form class="mp-search-form" action="" method="GET">
+                <div class="mp-search-input-wrapper">
+                    <input type="text" name="mp_search" class="mp-search-input" placeholder="<?php echo esc_attr($atts['placeholder']); ?>">
+                    <button type="submit" class="mp-search-btn">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="11" cy="11" r="8"></circle>
+                            <path d="m21 21-4.35-4.35"></path>
+                        </svg>
+                    </button>
+                </div>
+                <?php if ($atts['show_category_filter'] === 'true'): ?>
+                <select name="mp_category" class="mp-category-filter">
+                    <option value="">All Categories</option>
+                    <?php
+                    $categories = get_terms([
+                        'taxonomy' => 'mp_company_category',
+                        'hide_empty' => false,
+                    ]);
+                    foreach ($categories as $cat): ?>
+                    <option value="<?php echo esc_attr($cat->term_id); ?>"><?php echo esc_html($cat->name); ?></option>
+                    <?php endforeach; ?>
+                </select>
+                <?php endif; ?>
+            </form>
+            <div class="mp-search-results"></div>
+        </div>
+        <?php
+        return ob_get_clean();
+    }
+
+    /**
+     * Handle review modal AJAX
+     * 
+     * @return void
+     */
+    public function handleReviewModal(): void {
+        check_ajax_referer('mp_frontend_nonce', 'nonce');
+        
+        $business_id = isset($_POST['business_id']) ? (int) $_POST['business_id'] : 0;
+        
+        if (!$business_id) {
+            wp_send_json_error(['message' => __('Invalid business.', 'myprotector-platform')]);
+        }
+
+        $business = $this->businessModel->get($business_id);
+        
+        if (!$business) {
+            wp_send_json_error(['message' => __('Business not found.', 'myprotector-platform')]);
+        }
+
+        ob_start();
+        include $this->getPath('templates/components/review-modal.php');
+        $html = ob_get_clean();
+        
+        wp_send_json_success(['html' => $html]);
+    }
+
+    /**
+     * Handle search AJAX
+     * 
+     * @return void
+     */
+    public function handleSearch(): void {
+        check_ajax_referer('mp_frontend_nonce', 'nonce');
+        
+        $query = isset($_POST['query']) ? sanitize_text_field($_POST['query']) : '';
+        $category = isset($_POST['category']) ? sanitize_text_field($_POST['category']) : '';
+        $rating = isset($_POST['rating']) ? (float) $_POST['rating'] : 0;
+        $trust = isset($_POST['trust']) ? sanitize_text_field($_POST['trust']) : '';
+        
+        // Get businesses from database
+        $args = [
+            'search' => $query,
+            'limit' => 20,
+        ];
+        
+        if (!empty($category)) {
+            $args['category_id'] = (int) $category;
+        }
+        
+        if ($rating > 0) {
+            $args['min_rating'] = $rating;
+        }
+        
+        if (!empty($trust)) {
+            $args['trust_status'] = $trust;
+        }
+
+        $businesses = $this->businessModel->getAllActive($args);
+        
+        // Get HTML for cards
+        ob_start();
+        foreach ($businesses as $business) {
+            $signal = $this->trafficService->getSignal($business->business_id);
+            $location_parts = array_filter([$business->city, $business->state]);
+            $location = implode(', ', $location_parts);
+            include $this->getPath('templates/components/business-card.php');
+        }
+        $cards_html = ob_get_clean();
+        
+        if (empty($cards_html)) {
+            $cards_html = '<p class="mp-no-results">No businesses found matching your criteria.</p>';
+        }
+        
+        wp_send_json_success([
+            'html' => $cards_html,
+            'count' => count($businesses),
+        ]);
+    }
+
+    /**
+     * Handle review submission AJAX
+     * 
+     * @return void
+     */
+    public function handleSubmitReview(): void {
+        check_ajax_referer('mp_frontend_nonce', 'nonce');
+        
+        // Check if user is logged in
+        if (!is_user_logged_in()) {
+            wp_send_json_error(['message' => __('Please log in to submit a review.', 'myprotector-platform')]);
+        }
+
+        // Validate required fields
+        $business_id = isset($_POST['business_id']) ? (int) $_POST['business_id'] : 0;
+        $rating = isset($_POST['rating']) ? (int) $_POST['rating'] : 0;
+        $title = isset($_POST['review_title']) ? sanitize_text_field($_POST['review_title']) : '';
+        $content = isset($_POST['review_content']) ? sanitize_textarea_field($_POST['review_content']) : '';
+
+        if (!$business_id) {
+            wp_send_json_error(['message' => __('Invalid business.', 'myprotector-platform')]);
+        }
+
+        if ($rating < 1 || $rating > 5) {
+            wp_send_json_error(['message' => __('Please select a rating.', 'myprotector-platform')]);
+        }
+
+        if (empty($title)) {
+            wp_send_json_error(['message' => __('Please enter a review title.', 'myprotector-platform')]);
+        }
+
+        if (empty($content) || strlen($content) < 10) {
+            wp_send_json_error(['message' => __('Please enter a review (minimum 10 characters).', 'myprotector-platform')]);
+        }
+
+        // Check if user already reviewed this business
+        if ($this->reviewModel->hasUserReviewed(get_current_user_id(), $business_id)) {
+            wp_send_json_error(['message' => __('You have already submitted a review for this business.', 'myprotector-platform')]);
+        }
+
+        // Create the review
+        $review_id = $this->reviewModel->create([
+            'business_id' => $business_id,
+            'user_id' => get_current_user_id(),
+            'review_title' => $title,
+            'review_content' => $content,
+            'review_rating' => $rating,
+            'review_status' => 'pending',
+            'ip_address' => $this->getClientIp(),
+        ]);
+
+        if (!$review_id) {
+            wp_send_json_error(['message' => __('Failed to submit review. Please try again.', 'myprotector-platform')]);
+        }
+
+        // Trigger email notification
+        do_action('mp_review_submitted', $review_id);
+
+        wp_send_json_success([
+            'message' => __('Thank you for your review! It will be published after moderation.', 'myprotector-platform'),
+            'review_id' => $review_id,
+        ]);
+    }
+
+    /**
+     * Handle get reviews AJAX
+     * 
+     * @return void
+     */
+    public function handleGetReviews(): void {
+        check_ajax_referer('mp_frontend_nonce', 'nonce');
+        
+        $business_id = isset($_POST['business_id']) ? (int) $_POST['business_id'] : 0;
+        $page = isset($_POST['page']) ? (int) $_POST['page'] : 1;
+        $per_page = isset($_POST['per_page']) ? (int) $_POST['per_page'] : 10;
+        $sort = isset($_POST['sort']) ? sanitize_text_field($_POST['sort']) : 'recent';
+
+        if (!$business_id) {
+            wp_send_json_error(['message' => __('Invalid business.', 'myprotector-platform')]);
+        }
+
+        // Determine sort
+        $orderby = 'published_at';
+        $order = 'DESC';
+        switch ($sort) {
+            case 'highest':
+                $orderby = 'review_rating';
+                $order = 'DESC';
+                break;
+            case 'lowest':
+                $orderby = 'review_rating';
+                $order = 'ASC';
+                break;
+            case 'helpful':
+                $orderby = 'helpful_count';
+                $order = 'DESC';
+                break;
+        }
+
+        $offset = ($page - 1) * $per_page;
+        
+        $reviews = $this->reviewModel->getByBusiness($business_id, [
+            'status' => 'approved',
+            'orderby' => $orderby,
+            'order' => $order,
+            'limit' => $per_page,
+            'offset' => $offset,
+        ]);
+
+        // Build HTML
+        ob_start();
+        foreach ($reviews as $review) {
+            $reviewer = get_userdata($review->user_id);
+            $avatar = get_avatar_url($review->user_id, ['size' => 48]);
+            $reviewer_name = $reviewer ? $reviewer->display_name : __('Anonymous', 'myprotector-platform');
+            $date = $review->published_at ? date_i18n('F j, Y', strtotime($review->published_at)) : '';
+            ?>
+            <div class="mp-review-card" data-review-id="<?php echo esc_attr($review->review_id); ?>">
+                <div class="mp-review-header">
+                    <img src="<?php echo esc_url($avatar); ?>" alt="" class="mp-review-avatar">
+                    <div class="mp-review-meta">
+                        <div class="mp-review-reviewer">
+                            <?php echo esc_html($reviewer_name); ?>
+                            <?php if ($review->trust_level === 'verified'): ?>
+                            <span class="mp-review-verified">✓</span>
+                            <?php endif; ?>
+                        </div>
+                        <div class="mp-review-date"><?php echo esc_html($date); ?></div>
+                    </div>
+                    <div class="mp-rating"><?php echo $this->renderStars($review->review_rating); ?></div>
+                </div>
+                <h4 class="mp-review-title"><?php echo esc_html($review->review_title); ?></h4>
+                <p class="mp-review-content"><?php echo esc_html($review->review_content); ?></p>
+                <div class="mp-review-footer">
+                    <button class="mp-review-helpful-btn" data-review-id="<?php echo esc_attr($review->review_id); ?>">
+                        <span>👍</span>
+                        <span>Helpful</span>
+                        <span class="mp-helpful-count">(<?php echo esc_html($review->helpful_count); ?>)</span>
+                    </button>
+                </div>
+            </div>
+            <?php
+        }
+        $html = ob_get_clean();
+
+        wp_send_json_success([
+            'html' => $html,
+            'count' => count($reviews),
+            'has_more' => count($reviews) === $per_page,
+        ]);
+    }
+
+    /**
+     * Handle mark helpful AJAX
+     * 
+     * @return void
+     */
+    public function handleMarkHelpful(): void {
+        check_ajax_referer('mp_frontend_nonce', 'nonce');
+        
+        if (!is_user_logged_in()) {
+            wp_send_json_error(['message' => __('Please log in.', 'myprotector-platform')]);
+        }
+
+        $review_id = isset($_POST['review_id']) ? (int) $_POST['review_id'] : 0;
+        
+        if (!$review_id) {
+            wp_send_json_error(['message' => __('Invalid review.', 'myprotector-platform')]);
+        }
+
+        $result = $this->reviewModel->markHelpful($review_id, get_current_user_id());
+        
+        if ($result) {
+            $review = $this->reviewModel->get($review_id);
+            wp_send_json_success([
+                'message' => __('Marked as helpful!', 'myprotector-platform'),
+                'count' => $review ? $review->helpful_count : 0,
+            ]);
+        } else {
+            wp_send_json_error(['message' => __('You have already marked this as helpful.', 'myprotector-platform')]);
+        }
+    }
+
+    /**
+     * Handle respond to review AJAX
+     * 
+     * @return void
+     */
+    public function handleRespondToReview(): void {
+        check_ajax_referer('mp_frontend_nonce', 'nonce');
+        
+        if (!is_user_logged_in()) {
+            wp_send_json_error(['message' => __('Please log in.', 'myprotector-platform')]);
+        }
+
+        $review_id = isset($_POST['review_id']) ? (int) $_POST['review_id'] : 0;
+        $content = isset($_POST['response_content']) ? sanitize_textarea_field($_POST['response_content']) : '';
+
+        if (!$review_id) {
+            wp_send_json_error(['message' => __('Invalid review.', 'myprotector-platform')]);
+        }
+
+        if (empty($content)) {
+            wp_send_json_error(['message' => __('Please enter a response.', 'myprotector-platform')]);
+        }
+
+        $result = $this->reviewModel->addResponse($review_id, $content, get_current_user_id());
+        
+        if ($result) {
+            wp_send_json_success([
+                'message' => __('Response submitted!', 'myprotector-platform'),
+            ]);
+        } else {
+            wp_send_json_error(['message' => __('Failed to submit response.', 'myprotector-platform')]);
+        }
+    }
+
+    /**
+     * Render star rating HTML
+     * 
+     * @param float $rating
+     * @return string
+     */
+    public function renderStars(float $rating): string {
+        $html = '<div class="mp-stars">';
+        for ($i = 1; $i <= 5; $i++) {
+            if ($i <= $rating) {
+                $html .= '<span class="mp-star mp-star-filled">★</span>';
+            } elseif ($i - 0.5 <= $rating) {
+                $html .= '<span class="mp-star mp-star-half">★</span>';
+            } else {
+                $html .= '<span class="mp-star mp-star-empty">☆</span>';
+            }
+        }
+        $html .= '</div>';
+        return $html;
+    }
+
+    /**
+     * Get client IP address
+     * 
+     * @return string
+     */
+    protected function getClientIp(): string {
+        $ip = '';
+        
+        if (!empty($_SERVER['HTTP_CLIENT_IP'])) {
+            $ip = sanitize_text_field($_SERVER['HTTP_CLIENT_IP']);
+        } elseif (!empty($_SERVER['HTTP_X_FORWARDED_FOR'])) {
+            $ip = sanitize_text_field(explode(',', $_SERVER['HTTP_X_FORWARDED_FOR'])[0]);
+        } elseif (!empty($_SERVER['REMOTE_ADDR'])) {
+            $ip = sanitize_text_field($_SERVER['REMOTE_ADDR']);
+        }
+        
+        return $ip;
+    }
+
+    /**
+     * Get template part
+     * 
+     * @param string $template
+     * @param array $data
+     * @return string
+     */
+    public function getTemplatePart(string $template, array $data = []): string {
+        extract($data);
+        ob_start();
+        include $this->getPath('templates/' . $template . '.php');
+        return ob_get_clean();
+    }
+}
                 [
                     'id' => 2,
                     'name' => 'GreenLeaf Landscaping',
