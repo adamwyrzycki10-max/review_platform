@@ -16,6 +16,13 @@ use MyProtector\Core\Module;
 
 class Admin extends Module {
     /**
+     * Module name
+     * 
+     * @var string
+     */
+    protected $name = 'admin';
+
+    /**
      * Admin menu pages
      * 
      * @var array
