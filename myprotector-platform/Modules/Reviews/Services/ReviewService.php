@@ -10,31 +10,29 @@
 
 namespace MyProtector\Modules\Reviews\Services;
 
-use MyProtector\Core\Services\Container\ServiceContainer;
-
 class ReviewService {
     /**
      * Service container
      * 
-     * @var ServiceContainer
+     * @var array
      */
     protected $container;
 
     /**
      * Constructor
      * 
-     * @param ServiceContainer $container
+     * @param array $container
      */
-    public function __construct(ServiceContainer $container) {
+    public function __construct($container = []) {
         $this->container = $container;
     }
 
     /**
      * Get container
      * 
-     * @return ServiceContainer
+     * @return array
      */
-    public function getContainer(): ServiceContainer {
+    public function getContainer(): array {
         return $this->container;
     }
 }

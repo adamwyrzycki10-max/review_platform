@@ -61,6 +61,13 @@ abstract class Module implements ModuleInterface {
     protected $services = [];
 
     /**
+     * Service container
+     * 
+     * @var array
+     */
+    protected $container = [];
+
+    /**
      * Constructor
      * 
      * @param MyProtector $plugin
@@ -68,6 +75,7 @@ abstract class Module implements ModuleInterface {
     public function __construct(MyProtector $plugin) {
         $this->path = MYPROTECTOR_PATH . 'Modules/' . $this->getModuleDirectory() . '/';
         $this->url = MYPROTECTOR_URL . 'Modules/' . $this->getModuleDirectory() . '/';
+        $this->container = $plugin->getContainer();
     }
 
     /**
