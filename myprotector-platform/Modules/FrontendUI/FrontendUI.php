@@ -508,59 +508,6 @@ class FrontendUI extends Module {
     }
 
     /**
-     * Enqueue frontend assets
-     * 
-     * @return void
-     */
-    public function enqueueAssets(): void {
-        global $wp_query;
-        
-        // Only load on our custom pages
-        if (!isset($wp_query->query_vars['mp_page'])) {
-            return;
-        }
-        
-        // Enqueue CSS
-        wp_enqueue_style(
-            'mp-frontend-ui',
-            $this->getUrl('assets/css/style.css'),
-            [],
-            $this->version
-        );
-        
-        // Enqueue Google Fonts
-        wp_enqueue_style(
-            'mp-frontend-ui-fonts',
-            'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
-            [],
-            $this->version
-        );
-
-        // Enqueue jQuery if not already loaded
-        wp_enqueue_script('jquery');
-
-        // Enqueue frontend JavaScript
-        wp_enqueue_script(
-            'mp-frontend-ui',
-            $this->getUrl('assets/js/frontend.js'),
-            ['jquery'],
-            $this->version,
-            true
-        );
-
-        // Pass configuration to JavaScript
-        $company_url = defined('MYPROTECTOR_COMPANY_URL') ? MYPROTECTOR_COMPANY_URL : home_url();
-        
-        wp_localize_script('mp-frontend-ui', 'mpFrontendConfig', [
-            'ajaxUrl' => admin_url('admin-ajax.php'),
-            'nonce' => wp_create_nonce('mp_frontend_nonce'),
-            'companyUrl' => esc_url($company_url),
-            'isLoggedIn' => is_user_logged_in(),
-            'currentUserId' => get_current_user_id(),
-        ]);
-    }
-
-    /**
      * Add rewrite rules for frontend pages
      * 
      * @return void
