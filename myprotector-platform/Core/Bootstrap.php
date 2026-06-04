@@ -84,9 +84,6 @@ class Bootstrap {
      * @return void
      */
     protected function registerCoreHooks(): void {
-        // Initialize hook - boot modules after WordPress is loaded
-        add_action('init', [$this, 'bootModulesOnInit'], 1);
-        
         // Widgets init
         add_action('widgets_init', [$this, 'onWidgetsInit'], 10);
         

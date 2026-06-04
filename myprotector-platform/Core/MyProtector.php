@@ -87,9 +87,12 @@ class MyProtector {
         // Register modules
         $this->registerModules();
         
-        // Boot all modules
+        // Boot all modules on init hook (after WordPress is loaded)
         if ($this->bootstrap) {
-            $this->bootstrap->bootModules();
+            add_action('init', function() {
+                $this->bootstrap->bootModulesOnInit();
+            }, 1);
+            
             $this->bootstrap->registerHooks();
             $this->bootstrap->initRestApi();
             $this->bootstrap->registerShortcodes();

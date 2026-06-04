@@ -68,6 +68,27 @@ abstract class Module implements ModuleInterface {
     protected $container = [];
 
     /**
+     * Module initialization state
+     * 
+     * @var bool
+     */
+    protected $_initialized = false;
+
+    /**
+     * Admin controller instance
+     * 
+     * @var object|null
+     */
+    protected ?object $adminController = null;
+
+    /**
+     * Public controller instance
+     * 
+     * @var object|null
+     */
+    protected ?object $publicController = null;
+
+    /**
      * Constructor
      * 
      * @param MyProtector $plugin
