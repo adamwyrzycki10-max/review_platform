@@ -1109,10 +1109,72 @@ class FrontendUI extends Module {
         add_shortcode('mp_login', [$this, 'renderLoginPage']);
         add_shortcode('mp_register', [$this, 'renderRegisterPage']);
         
+        // Universal frontend shortcode
+        add_shortcode('mp_frontend_ui', [$this, 'renderFrontendUI']);
+        
         // Widgets
         add_shortcode('mp_rating', [$this, 'renderRatingBadge']);
-        add_shortcode('mp_reviews', [$this, 'renderReviewSummary']);
+        add_short_code('mp_reviews', [$this, 'renderReviewSummary']);
         add_shortcode('mp_trust', [$this, 'renderTrustWidget']);
+    }
+
+    /**
+     * Universal Frontend UI Shortcode
+     * Renders different pages based on URL or type parameter
+     * 
+     * @param array $atts
+     * @return string
+     */
+    public function renderFrontendUI(array $atts = []): string {
+        $atts = shortcode_atts([
+            'type' => $this->detectPageType(),
+        ], $atts);
+
+        // Enqueue assets
+        $this->enqueueAssets();
+
+        // Render based on type
+        switch ($atts['type']) {
+            case 'home':
+                return $this->renderHomepage();
+            case 'login':
+                return $this->renderLoginPage();
+            case 'register':
+                return $this->renderRegisterPage();
+            case 'dashboard':
+                return $this->renderDashboard();
+            case 'directory':
+            case 'businesses':
+                return $this->renderDirectory();
+            case 'business':
+                return $this->renderBusinessProfile($atts);
+            default:
+                return $this->renderHomepage();
+        }
+    }
+
+    /**
+     * Detect page type from URL
+     * 
+     * @return string
+     */
+    protected function detectPageType(): string {
+        $uri = $_SERVER['REQUEST_URI'] ?? '';
+        
+        if (strpos($uri, '/login') !== false) {
+            return 'login';
+        }
+        if (strpos($uri, '/register') !== false) {
+            return 'register';
+        }
+        if (strpos($uri, '/dashboard') !== false) {
+            return 'dashboard';
+        }
+        if (strpos($uri, '/businesses') !== false) {
+            return 'directory';
+        }
+        
+        return 'home';
     }
 
     /**
