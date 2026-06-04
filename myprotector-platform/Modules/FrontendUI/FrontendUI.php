@@ -404,58 +404,6 @@ class FrontendUI extends Module {
     }
 
     /**
-     * Add rewrite rules for frontend pages
-     * 
-     * @return void
-     */
-    public function addRewriteRules(): void {
-        // Flush rules only once on activation
-        $rules_key = 'mp_flush_rewrite_rules';
-        if (get_option($rules_key)) {
-            flush_rewrite_rules();
-            delete_option($rules_key);
-        }
-
-        // Add custom rewrite rules
-        add_rewrite_rule(
-            '^dashboard/?$',
-            'index.php?mp_page=dashboard',
-            'top'
-        );
-        add_rewrite_rule(
-            '^business-dashboard/?$',
-            'index.php?mp_page=business-dashboard',
-            'top'
-        );
-        add_rewrite_rule(
-            '^reseller-dashboard/?$',
-            'index.php?mp_page=reseller-dashboard',
-            'top'
-        );
-        add_rewrite_rule(
-            '^businesses/?$',
-            'index.php?mp_page=businesses',
-            'top'
-        );
-        add_rewrite_rule(
-            '^about/?$',
-            'index.php?mp_page=about',
-            'top'
-        );
-        add_rewrite_rule(
-            '^contact/?$',
-            'index.php?mp_page=contact',
-            'top'
-        );
-
-        // Register query var
-        add_filter('query_vars', function($vars) {
-            $vars[] = 'mp_page';
-            return $vars;
-        });
-    }
-
-    /**
      * Handle page template loading
      * 
      * @param string $template
@@ -638,35 +586,12 @@ class FrontendUI extends Module {
         add_rewrite_rule('^about/?$', 'index.php?mp_page=about', 'top');
         add_rewrite_rule('^contact/?$', 'index.php?mp_page=contact', 'top');
         
-        // Add query vars - ensure they're added
-        add_filter('mp_query_vars', function($vars) {
+        // Add query vars for mp_page and mp_slug
+        add_filter('query_vars', function($vars) {
             $vars[] = 'mp_page';
             $vars[] = 'mp_slug';
             return $vars;
         });
-    }
-    
-    /**
-     * Boot the module - runs during bootstrap
-     * 
-     * @return void
-     */
-    public function boot(): void {
-        // Register rewrite rules on init (early)
-        add_action('init', [$this, 'initRewriteRules'], 1);
-        
-        // High priority template include
-        add_filter('template_include', [$this, 'handleTemplateInclude'], 1);
-    }
-    
-    /**
-     * Initialize rewrite rules on init
-     * 
-     * @return void
-     */
-    public function initRewriteRules(): void {
-        $this->addRewriteRules();
-        flush_rewrite_rules(false);
     }
 
     /**
