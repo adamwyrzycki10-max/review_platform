@@ -13,10 +13,11 @@ if (!defined('ABSPATH')) exit;
 // Get theme header
 get_header();
 
-// Get mock data
-$businesses = $this->getMockData('businesses');
-$stats = $this->getMockData('stats');
-$reviews = $this->getMockData('reviews');
+// Get FrontendUI module instance for mock data
+$frontend_ui = MyProtector\Modules\FrontendUI\FrontendUI::getInstance();
+$businesses = $frontend_ui->getMockData('businesses');
+$stats = $frontend_ui->getMockData('stats');
+$reviews = $frontend_ui->getMockData('reviews');
 $company_url = defined('MYPROTECTOR_COMPANY_URL') ? MYPROTECTOR_COMPANY_URL : home_url();
 $founder_name = defined('MYPROTECTOR_FOUNDER_NAME') ? MYPROTECTOR_FOUNDER_NAME : 'Adam Wyrzycki';
 $founder_linkedin = defined('MYPROTECTOR_FOUNDER_LINKEDIN') ? MYPROTECTOR_FOUNDER_LINKEDIN : 'https://linkedin.com/in/adamwyrzycki';

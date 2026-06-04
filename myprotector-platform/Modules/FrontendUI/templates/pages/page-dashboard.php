@@ -21,13 +21,15 @@ if (!is_user_logged_in()) {
 
 get_header();
 
+// Get FrontendUI module instance
+$frontend_ui = MyProtector\Modules\FrontendUI\FrontendUI::getInstance();
 $current_user = wp_get_current_user();
 $company_url = defined('MYPROTECTOR_COMPANY_URL') ? MYPROTECTOR_COMPANY_URL : home_url();
 $logout_url = wp_logout_url($company_url);
 
 // Get user's data
 $user_id = get_current_user_id();
-$user_reviews = $this->getMockData('reviews');
+$user_reviews = $frontend_ui->getMockData('reviews');
 $stats = [
     'total_reviews' => count($user_reviews),
     'helpful_votes' => 45,

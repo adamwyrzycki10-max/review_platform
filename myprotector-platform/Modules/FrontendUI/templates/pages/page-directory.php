@@ -12,8 +12,10 @@ if (!defined('ABSPATH')) exit;
 
 get_header();
 
-$businesses = $this->getMockData('businesses');
-$categories = $this->getMockData('categories');
+// Get FrontendUI module instance for mock data
+$frontend_ui = MyProtector\Modules\FrontendUI\FrontendUI::getInstance();
+$businesses = $frontend_ui->getMockData('businesses');
+$categories = $frontend_ui->getMockData('categories');
 $company_url = defined('MYPROTECTOR_COMPANY_URL') ? MYPROTECTOR_COMPANY_URL : home_url();
 $search_query = isset($_GET['search']) ? sanitize_text_field($_GET['search']) : '';
 $filter_status = isset($_GET['status']) ? sanitize_text_field($_GET['status']) : 'all';

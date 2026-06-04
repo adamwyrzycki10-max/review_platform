@@ -18,6 +18,13 @@ use MyProtector\Services\TrafficSignal\TrafficSignalService;
 
 class FrontendUI extends Module {
     /**
+     * Singleton instance
+     * 
+     * @var FrontendUI
+     */
+    private static $instance = null;
+
+    /**
      * Module name
      * 
      * @var string
@@ -529,10 +536,153 @@ class FrontendUI extends Module {
         $this->addAction('wp_ajax_nopriv_mp_ajax_lost_password', [$this, 'ajaxLostPassword']);
         $this->addAction('wp_ajax_mp_ajax_reset_password', [$this, 'ajaxResetPassword']);
         $this->addAction('wp_ajax_nopriv_mp_ajax_reset_password', [$this, 'ajaxResetPassword']);
+        $this->addAction('wp_ajax_mp_ajax_save_settings', [$this, 'ajaxSaveSettings']);
         
         // Contact form handler
         $this->addAction('wp_ajax_mp_contact_form', [$this, 'handleContactForm']);
         $this->addAction('wp_ajax_nopriv_mp_contact_form', [$this, 'handleContactForm']);
+        
+        // Add rewrite rules for frontend pages
+        $this->addAction('init', [$this, 'addRewriteRules']);
+        
+        // Handle template include
+        $this->addFilter('template_include', [$this, 'handleTemplateInclude']);
+    }
+
+    /**
+     * Enqueue frontend assets
+     * 
+     * @return void
+     */
+    public function enqueueAssets(): void {
+        // Enqueue CSS
+        wp_enqueue_style(
+            'mp-frontend-ui',
+            $this->getUrl('assets/css/style.css'),
+            [],
+            $this->version
+        );
+        
+        // Enqueue Google Fonts
+        wp_enqueue_style(
+            'mp-frontend-ui-fonts',
+            'https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap',
+            [],
+            $this->version
+        );
+
+        // Enqueue jQuery if not already loaded
+        wp_enqueue_script('jquery');
+
+        // Enqueue frontend JavaScript
+        wp_enqueue_script(
+            'mp-frontend-ui',
+            $this->getUrl('assets/js/frontend.js'),
+            ['jquery'],
+            $this->version,
+            true
+        );
+
+        // Pass configuration to JavaScript
+        $company_url = defined('MYPROTECTOR_COMPANY_URL') ? MYPROTECTOR_COMPANY_URL : home_url();
+        
+        wp_localize_script('mp-frontend-ui', 'mpFrontendConfig', [
+            'ajaxUrl' => admin_url('admin-ajax.php'),
+            'nonce' => wp_create_nonce('mp_frontend_nonce'),
+            'companyUrl' => esc_url($company_url),
+            'isLoggedIn' => is_user_logged_in(),
+            'currentUserId' => get_current_user_id(),
+        ]);
+    }
+
+    /**
+     * Add rewrite rules for frontend pages
+     * 
+     * @return void
+     */
+    public function addRewriteRules(): void {
+        add_rewrite_rule('^dashboard/?$', 'index.php?mp_page=dashboard', 'top');
+        add_rewrite_rule('^business-dashboard/?$', 'index.php?mp_page=business-dashboard', 'top');
+        add_rewrite_rule('^reseller-dashboard/?$', 'index.php?mp_page=reseller-dashboard', 'top');
+        add_rewrite_rule('^businesses/?$', 'index.php?mp_page=businesses', 'top');
+        add_rewrite_rule('^business/([^/]+)/?$', 'index.php?mp_page=business&mp_slug=$matches[1]', 'top');
+        add_rewrite_rule('^login/?$', 'index.php?mp_page=login', 'top');
+        add_rewrite_rule('^register/?$', 'index.php?mp_page=register', 'top');
+        add_rewrite_rule('^about/?$', 'index.php?mp_page=about', 'top');
+        add_rewrite_rule('^contact/?$', 'index.php?mp_page=contact', 'top');
+        
+        add_filter('query_vars', function($vars) {
+            $vars[] = 'mp_page';
+            $vars[] = 'mp_slug';
+            return $vars;
+        });
+    }
+
+    /**
+     * Handle template include for custom pages
+     * 
+     * @param string $template
+     * @return string
+     */
+    public function handleTemplateInclude($template) {
+        $mp_page = get_query_var('mp_page');
+        
+        if (empty($mp_page)) {
+            return $template;
+        }
+        
+        $template_file = $this->page_routes[$mp_page] ?? null;
+        
+        if ($template_file) {
+            $template_path = $this->getPath('templates/' . $template_file);
+            if (file_exists($template_path)) {
+                return $template_path;
+            }
+        }
+        
+        return $template;
+    }
+
+    /**
+     * AJAX save settings handler
+     * 
+     * @return void
+     */
+    public function ajaxSaveSettings(): void {
+        check_ajax_referer('mp_frontend_nonce', 'nonce');
+        
+        if (!is_user_logged_in()) {
+            wp_send_json_error(['message' => __('Please log in to save settings.', 'myprotector-platform')]);
+        }
+        
+        $user_id = get_current_user_id();
+        
+        if (isset($_POST['first_name'])) {
+            wp_update_user([
+                'ID' => $user_id,
+                'first_name' => sanitize_text_field($_POST['first_name']),
+            ]);
+        }
+        
+        if (isset($_POST['last_name'])) {
+            wp_update_user([
+                'ID' => $user_id,
+                'last_name' => sanitize_text_field($_POST['last_name']),
+            ]);
+        }
+        
+        if (isset($_POST['password']) && !empty($_POST['password'])) {
+            $current_password = $_POST['current_password'] ?? '';
+            
+            $user = get_user_by('id', $user_id);
+            if (!wp_check_password($current_password, $user->user_pass, $user->ID)) {
+                wp_send_json_error(['message' => __('Current password is incorrect.', 'myprotector-platform')]);
+            }
+            
+            wp_set_password($_POST['password'], $user->ID);
+        }
+        
+        wp_send_json_success(['message' => __('Settings saved successfully!', 'myprotector-platform')]);
     }
 
     /**
@@ -1437,6 +1587,18 @@ class FrontendUI extends Module {
             return $this->mock_data;
         }
         return $this->mock_data[$key] ?? null;
+    }
+
+    /**
+     * Get singleton instance
+     * 
+     * @return FrontendUI
+     */
+    public static function getInstance() {
+        if (self::$instance === null) {
+            self::$instance = new self(myprotector());
+        }
+        return self::$instance;
     }
 
     /**

@@ -21,6 +21,8 @@ if (!is_user_logged_in()) {
 
 get_header();
 
+// Get FrontendUI module instance
+$frontend_ui = MyProtector\Modules\FrontendUI\FrontendUI::getInstance();
 $current_user = wp_get_current_user();
 $company_url = defined('MYPROTECTOR_COMPANY_URL') ? MYPROTECTOR_COMPANY_URL : home_url();
 $logout_url = wp_logout_url($company_url);
@@ -46,7 +48,7 @@ $stats = [
     'response_rate' => 94
 ];
 
-$recent_reviews = $this->getMockData('reviews');
+$recent_reviews = $frontend_ui->getMockData('reviews');
 ?>
 
 <div class="mp-frontend-ui">

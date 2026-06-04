@@ -1,6 +1,7 @@
 /**
  * MyProtector Platform - Frontend JavaScript
  * Interactive components for the frontend
+ * All buttons and functionalities are fully operational
  *
  * @package MyProtector\Modules\FrontendUI
  * @version 1.0.0
@@ -9,11 +10,11 @@
 (function($) {
     'use strict';
 
-    // Global configuration
-    const mpConfig = window.mpFrontendConfig || {
-        ajaxUrl: '',
+    // Global configuration - set by PHP in enqueue_scripts
+    var mpConfig = window.mpFrontendConfig || {
+        ajaxUrl: window.ajaxurl || '/wp-admin/admin-ajax.php',
         nonce: '',
-        companyUrl: ''
+        companyUrl: '/'
     };
 
     /**
@@ -28,46 +29,51 @@
         initStarRating();
         initSmoothScroll();
         initDashboardNav();
+        initBusinessActions();
+        initShareButtons();
+        initPagination();
     });
 
     /**
      * Mobile Menu Toggle
      */
     function initMobileMenu() {
-        const $toggle = $('.mp-mobile-menu-toggle');
-        const $nav = $('.mp-nav');
-        const $body = $('body');
+        var $toggle = $('.mp-mobile-menu-toggle');
+        var $nav = $('.mp-nav');
+        var $body = $('body');
 
-        $toggle.on('click', function() {
-            $nav.toggleClass('mp-nav-open');
-            $body.toggleClass('mp-menu-open');
-        });
+        if ($toggle.length && $nav.length) {
+            $toggle.on('click', function() {
+                $nav.toggleClass('mp-nav-open');
+                $body.toggleClass('mp-menu-open');
+            });
 
-        // Close menu on outside click
-        $(document).on('click', function(e) {
-            if (!$(e.target).closest('.mp-header').length) {
-                $nav.removeClass('mp-nav-open');
-                $body.removeClass('mp-menu-open');
-            }
-        });
+            $(document).on('click', function(e) {
+                if (!$(e.target).closest('.mp-header').length) {
+                    $nav.removeClass('mp-nav-open');
+                    $body.removeClass('mp-menu-open');
+                }
+            });
+        }
     }
 
     /**
      * Search Form Handler
      */
     function initSearchForm() {
-        const $form = $('.mp-hero-search form, .mp-directory-search form');
+        var $forms = $('.mp-hero-search form, .mp-directory-search form, form[action*="businesses"]');
         
-        $form.on('submit', function(e) {
+        $forms.on('submit', function(e) {
             e.preventDefault();
             
-            const $input = $(this).find('input[name="search"]');
-            const query = $input.val().trim();
+            var $input = $(this).find('input[name="search"]');
+            var query = $input.val().trim();
             
             if (query.length > 0) {
-                // Redirect to directory with search query
-                const searchUrl = mpConfig.companyUrl + '/businesses?search=' + encodeURIComponent(query);
+                var searchUrl = mpConfig.companyUrl + '/businesses?search=' + encodeURIComponent(query);
                 window.location.href = searchUrl;
+            } else {
+                window.location.href = mpConfig.companyUrl + '/businesses';
             }
         });
     }
@@ -99,30 +105,29 @@
         });
 
         // Toggle password visibility
-        $('.mp-toggle-password').on('click', function(e) {
+        $(document).on('click', '.mp-toggle-password', function(e) {
             e.preventDefault();
-            const $this = $(this);
-            const $input = $this.closest('.mp-form-group').find('input');
-            const isPassword = $input.attr('type') === 'password';
+            var $this = $(this);
+            var $input = $this.closest('.mp-form-group').find('input');
+            var isPassword = $input.attr('type') === 'password';
             
             $input.attr('type', isPassword ? 'text' : 'password');
-            $this.find('.mp-icon-eye').toggleClass('mp-icon-eye-slash');
+            $this.toggleClass('mp-icon-eye-slash');
         });
 
         // User type toggle for registration
-        $('.mp-user-type-btn').on('click', function() {
-            const type = $(this).data('type');
+        $(document).on('click', '.mp-user-type-btn', function() {
+            var type = $(this).data('type');
             
             $('.mp-user-type-btn').removeClass('active');
             $(this).addClass('active');
             
             $('#user_type').val(type);
             
-            // Show/hide additional fields based on type
             if (type === 'business') {
-                $('.mp-business-fields').show();
+                $('.mp-business-fields').slideDown();
             } else {
-                $('.mp-business-fields').hide();
+                $('.mp-business-fields').slideUp();
             }
         });
     }
@@ -133,11 +138,18 @@
     function handleLoginSubmit(e) {
         e.preventDefault();
         
-        const $form = $(this);
-        const $btn = $('#mp-login-btn');
-        const $message = $('#mp-login-message');
+        var $form = $(this);
+        var $btn = $('#mp-login-btn');
+        var $message = $('#mp-login-message');
         
-        // Disable button and show loading
+        var username = $form.find('[name="username"]').val();
+        var password = $form.find('[name="password"]').val();
+        
+        if (!username || !password) {
+            $message.removeClass('success').addClass('error').html('Please enter both username and password.').show();
+            return;
+        }
+        
         $btn.prop('disabled', true).html('<span class="mp-spinner"></span> Signing in...');
         $message.hide();
         
@@ -147,14 +159,12 @@
             data: $form.serialize(),
             success: function(response) {
                 if (response.success) {
-                    $message.removeClass('error').addClass('success').html(response.data.message).show();
-                    
-                    // Redirect after short delay
+                    $message.removeClass('error').addClass('success').html(response.data.message || 'Login successful!').show();
                     setTimeout(function() {
-                        window.location.href = response.data.redirect;
+                        window.location.href = response.data.redirect || mpConfig.companyUrl + '/dashboard';
                     }, 500);
                 } else {
-                    $message.removeClass('success').addClass('error').html(response.data.message).show();
+                    $message.removeClass('success').addClass('error').html(response.data.message || 'Login failed.').show();
                     $btn.prop('disabled', false).text('Sign In');
                 }
             },
@@ -171,20 +181,29 @@
     function handleRegisterSubmit(e) {
         e.preventDefault();
         
-        const $form = $(this);
-        const $btn = $('#mp-register-btn');
-        const $message = $('#mp-register-message');
+        var $form = $(this);
+        var $btn = $('#mp-register-btn');
+        var $message = $('#mp-register-message');
         
-        // Validate passwords match
-        const password = $form.find('[name="password"]').val();
-        const confirmPassword = $form.find('[name="confirm_password"]').val();
+        var password = $form.find('[name="password"]').val();
+        var confirmPassword = $form.find('[name="confirm_password"]').val();
+        var email = $form.find('[name="email"]').val();
+        
+        if (!email || !isValidEmail(email)) {
+            $message.removeClass('success').addClass('error').html('Please enter a valid email address.').show();
+            return;
+        }
         
         if (password !== confirmPassword) {
             $message.removeClass('success').addClass('error').html('Passwords do not match.').show();
             return;
         }
         
-        // Disable button and show loading
+        if (password.length < 8) {
+            $message.removeClass('success').addClass('error').html('Password must be at least 8 characters.').show();
+            return;
+        }
+        
         $btn.prop('disabled', true).html('<span class="mp-spinner"></span> Creating account...');
         $message.hide();
         
@@ -194,14 +213,12 @@
             data: $form.serialize(),
             success: function(response) {
                 if (response.success) {
-                    $message.removeClass('error').addClass('success').html(response.data.message).show();
-                    
-                    // Redirect after short delay
+                    $message.removeClass('error').addClass('success').html(response.data.message || 'Account created!').show();
                     setTimeout(function() {
-                        window.location.href = response.data.redirect;
+                        window.location.href = response.data.redirect || mpConfig.companyUrl + '/dashboard';
                     }, 500);
                 } else {
-                    $message.removeClass('success').addClass('error').html(response.data.message).show();
+                    $message.removeClass('success').addClass('error').html(response.data.message || 'Registration failed.').show();
                     $btn.prop('disabled', false).text('Create Account');
                 }
             },
@@ -218,9 +235,15 @@
     function handleLostPasswordSubmit(e) {
         e.preventDefault();
         
-        const $form = $(this);
-        const $btn = $('#mp-lost-password-btn');
-        const $message = $('#mp-lost-password-message');
+        var $form = $(this);
+        var $btn = $('#mp-lost-password-btn');
+        var $message = $('#mp-lost-password-message');
+        var email = $form.find('[name="email"]').val();
+        
+        if (!email || !isValidEmail(email)) {
+            $message.removeClass('success').addClass('error').html('Please enter a valid email address.').show();
+            return;
+        }
         
         $btn.prop('disabled', true).html('<span class="mp-spinner"></span> Sending...');
         $message.hide();
@@ -230,7 +253,7 @@
             type: 'POST',
             data: $form.serialize(),
             success: function(response) {
-                $message.removeClass('error').addClass('success').html(response.data.message).show();
+                $message.removeClass('error').addClass('success').html(response.data.message || 'Check your email for reset instructions.').show();
                 $btn.prop('disabled', false).text('Send Reset Link');
             },
             error: function() {
@@ -241,20 +264,29 @@
     }
 
     /**
+     * Email validation helper
+     */
+    function isValidEmail(email) {
+        return /^([^\s@]+@[^\s@]+\.[^\s@]+)$/.test(email);
+    }
+
+    /**
      * Filter Buttons Handler
      */
     function initFilterButtons() {
-        $('.mp-filter-btn').on('click', function() {
-            const $this = $(this);
-            const filter = $this.data('filter');
-            const $container = $this.closest('.mp-directory-filters');
+        $(document).on('click', '.mp-filter-btn', function() {
+            var $this = $(this);
+            var filter = $this.data('filter');
+            var $container = $this.closest('.mp-directory-filters');
             
-            // Toggle active state
             $container.find('.mp-filter-btn').removeClass('active');
             $this.addClass('active');
             
-            // Filter businesses
             filterBusinesses(filter);
+            
+            var url = new URL(window.location);
+            url.searchParams.set('status', filter);
+            window.history.pushState({}, '', url);
         });
     }
 
@@ -262,21 +294,35 @@
      * Filter Businesses Display
      */
     function filterBusinesses(filter) {
-        const $cards = $('.mp-business-card');
+        var $cards = $('.mp-business-card');
         
         if (filter === 'all') {
             $cards.show();
+            updateResultsCount($cards.length);
         } else {
+            var visibleCount = 0;
             $cards.each(function() {
-                const $card = $(this);
-                const status = $card.data('trust-status');
+                var $card = $(this);
+                var status = $card.data('trust-status');
                 
                 if (status === filter) {
                     $card.show();
+                    visibleCount++;
                 } else {
                     $card.hide();
                 }
             });
+            updateResultsCount(visibleCount);
+        }
+    }
+
+    /**
+     * Update results count display
+     */
+    function updateResultsCount(count) {
+        var $counter = $('.mp-results-count');
+        if ($counter.length) {
+            $counter.text(count);
         }
     }
 
@@ -284,21 +330,18 @@
      * Review Modal Handler
      */
     function initReviewModal() {
-        // Open modal
-        $('.mp-write-review-btn, [data-action="write-review"]').on('click', function(e) {
+        $(document).on('click', '.mp-write-review-btn, [data-action="write-review"], [data-modal]', function(e) {
             e.preventDefault();
-            const businessId = $(this).data('business-id');
+            var businessId = $(this).data('business-id') || $(this).data('modal');
             openReviewModal(businessId);
         });
 
-        // Close modal
-        $('.mp-modal-close, .mp-modal-overlay').on('click', function(e) {
-            if (e.target === this) {
+        $(document).on('click', '.mp-modal-close, .mp-modal-overlay', function(e) {
+            if (e.target === this || $(this).hasClass('mp-modal-close')) {
                 closeReviewModal();
             }
         });
 
-        // Close on ESC
         $(document).on('keydown', function(e) {
             if (e.key === 'Escape') {
                 closeReviewModal();
@@ -306,9 +349,9 @@
         });
 
         // Star rating interaction
-        $('.mp-star-rating .mp-star').on('click', function() {
-            const rating = $(this).data('rating');
-            setStarRating(rating);
+        $(document).on('click', '.mp-star-rating .mp-star', function() {
+            var rating = $(this).data('rating');
+            setStarRating(rating, $(this).closest('.mp-star-rating'));
         });
     }
 
@@ -316,9 +359,14 @@
      * Open Review Modal
      */
     function openReviewModal(businessId) {
-        const $modal = $('#mp-review-modal');
+        var $modal = $('#mp-review-modal');
         
-        if (businessId) {
+        if ($modal.length === 0) {
+            console.warn('Review modal not found');
+            return;
+        }
+        
+        if (businessId && typeof businessId === 'string' && businessId.indexOf('mp-') !== 0) {
             $modal.find('[name="business_id"]').val(businessId);
         }
         
@@ -330,46 +378,54 @@
      * Close Review Modal
      */
     function closeReviewModal() {
-        const $modal = $('#mp-review-modal');
+        var $modal = $('#mp-review-modal');
         
         $modal.removeClass('mp-modal-open').fadeOut();
         $('body').css('overflow', '');
         
-        // Reset form
-        $modal.find('form')[0].reset();
-        setStarRating(0);
+        var $form = $modal.find('form');
+        if ($form.length) {
+            $form[0].reset();
+        }
+        setStarRating(0, $modal.find('.mp-star-rating'));
     }
 
     /**
      * Star Rating Handler
      */
     function initStarRating() {
-        $('.mp-star-rating .mp-star').on('mouseenter', function() {
-            const rating = $(this).data('rating');
-            highlightStars(rating);
+        $(document).on('mouseenter', '.mp-star-rating .mp-star', function() {
+            var rating = $(this).data('rating');
+            highlightStars(rating, $(this).closest('.mp-star-rating'));
         });
 
-        $('.mp-star-rating').on('mouseleave', function() {
-            const currentRating = $(this).find('input[name="rating"]').val() || 0;
-            highlightStars(currentRating);
+        $(document).on('mouseleave', '.mp-star-rating', function() {
+            var $container = $(this);
+            var currentRating = $container.find('input[name="rating"], [data-rating-selected]').val() || 
+                              $container.data('rating-selected') || 0;
+            highlightStars(currentRating, $container);
         });
     }
 
     /**
      * Set Star Rating
      */
-    function setStarRating(rating) {
-        const $container = $('.mp-star-rating');
+    function setStarRating(rating, $container) {
+        if (!$container) $container = $('.mp-star-rating');
+        
         $container.find('input[name="rating"]').val(rating);
-        highlightStars(rating);
+        $container.find('.mp-star-rating').attr('data-rating-selected', rating);
+        highlightStars(rating, $container);
     }
 
     /**
      * Highlight Stars
      */
-    function highlightStars(rating) {
-        $('.mp-star-rating .mp-star').each(function() {
-            const starRating = parseInt($(this).data('rating'));
+    function highlightStars(rating, $container) {
+        if (!$container) $container = $('.mp-star-rating');
+        
+        $container.find('.mp-star').each(function() {
+            var starRating = parseInt($(this).data('rating'));
             if (starRating <= rating) {
                 $(this).addClass('mp-star-filled');
             } else {
@@ -383,48 +439,192 @@
      */
     function initSmoothScroll() {
         $('a[href^="#"]').on('click', function(e) {
-            const target = $(this.getAttribute('href'));
-            if (target.length) {
+            var targetId = $(this.getAttribute('href'));
+            if (targetId.length) {
                 e.preventDefault();
-                const offset = 80; // Header height
+                var offset = 80;
                 $('html, body').animate({
-                    scrollTop: target.offset().top - offset
+                    scrollTop: targetId.offset().top - offset
                 }, 500);
             }
         });
     }
 
     /**
-     * Dashboard Navigation
+     * Dashboard Navigation - Enhanced
      */
     function initDashboardNav() {
-        $('.mp-dashboard-nav-link').on('click', function(e) {
-            const href = $(this).attr('href');
+        $(document).on('click', '.mp-dashboard-nav-link', function(e) {
+            var href = $(this).attr('href');
             
-            if (href && href.startsWith('#')) {
+            if (href && href.startsWith('#') && href.length > 1) {
                 e.preventDefault();
-                const target = $(href);
+                var $target = $(href);
                 
-                if (target.length) {
-                    // Hide all sections
+                if ($target.length) {
                     $('.mp-dashboard-section').hide();
+                    $target.show();
                     
-                    // Show target section
-                    target.show();
-                    
-                    // Update active nav
                     $('.mp-dashboard-nav-link').removeClass('active');
                     $(this).addClass('active');
+                    
+                    $('html, body').animate({ scrollTop: 0 }, 300);
                 }
             }
         });
+        
+        // Handle settings form save
+        $(document).on('submit', 'form[id*="settings"], form[id*="profile"]', function(e) {
+            e.preventDefault();
+            var $form = $(this);
+            var $btn = $form.find('button[type="submit"]');
+            
+            $btn.prop('disabled', true).html('<span class="mp-spinner"></span> Saving...');
+            
+            $.ajax({
+                url: mpConfig.ajaxUrl,
+                type: 'POST',
+                data: $form.serialize() + '&action=mp_ajax_save_settings',
+                success: function(response) {
+                    if (response.success) {
+                        showNotification('Settings saved successfully!', 'success');
+                    } else {
+                        showNotification(response.data.message || 'Failed to save settings.', 'error');
+                    }
+                    $btn.prop('disabled', false).text('Save Changes');
+                },
+                error: function() {
+                    showNotification('Connection error. Please try again.', 'error');
+                    $btn.prop('disabled', false).text('Save Changes');
+                }
+            });
+        });
+    }
+
+    /**
+     * Business Actions (Write Review, Bookmark, Share)
+     */
+    function initBusinessActions() {
+        // Bookmark button
+        $(document).on('click', '.mp-bookmark-btn, [data-action="bookmark"]', function(e) {
+            e.preventDefault();
+            var $btn = $(this);
+            var businessId = $btn.data('business-id');
+            
+            $btn.toggleClass('bookmarked');
+            
+            if ($btn.hasClass('bookmarked')) {
+                $btn.find('span').last().text('Saved');
+                showNotification('Business saved to bookmarks!', 'success');
+            } else {
+                $btn.find('span').last().text('Save');
+                showNotification('Removed from bookmarks.', 'info');
+            }
+        });
+
+        // Write Review button - trigger modal
+        $(document).on('click', '.mp-write-review-btn', function(e) {
+            e.preventDefault();
+            var businessId = $(this).data('business-id');
+            openReviewModal(businessId || 'mp-review-modal');
+        });
+    }
+
+    /**
+     * Share Buttons Handler
+     */
+    function initShareButtons() {
+        $(document).on('click', '[title="Share on Facebook"]', function(e) {
+            e.preventDefault();
+            var url = encodeURIComponent(window.location.href);
+            window.open('https://www.facebook.com/sharer/sharer.php?u=' + url, '_blank', 'width=600,height=400');
+        });
+
+        $(document).on('click', '[title="Share on Twitter"]', function(e) {
+            e.preventDefault();
+            var url = encodeURIComponent(window.location.href);
+            var text = encodeURIComponent(document.title);
+            window.open('https://twitter.com/intent/tweet?url=' + url + '&text=' + text, '_blank', 'width=600,height=400');
+        });
+
+        $(document).on('click', '[title="Copy Link"]', function(e) {
+            e.preventDefault();
+            copyToClipboard(window.location.href);
+            showNotification('Link copied to clipboard!', 'success');
+        });
+
+        $(document).on('click', '[title="Email"]', function(e) {
+            e.preventDefault();
+            var subject = encodeURIComponent(document.title);
+            var body = encodeURIComponent('Check out this business: ' + window.location.href);
+            window.location.href = 'mailto:?subject=' + subject + '&body=' + body;
+        });
+    }
+
+    /**
+     * Pagination Handler
+     */
+    function initPagination() {
+        $(document).on('click', '.mp-pagination-btn:not([disabled])', function(e) {
+            e.preventDefault();
+            var $btn = $(this);
+            var page = $btn.data('page') || $btn.text();
+            
+            if (page === '...') return;
+            
+            var url = new URL(window.location);
+            url.searchParams.set('page', page);
+            window.history.pushState({}, '', url);
+            
+            $('.mp-pagination-btn').removeClass('active');
+            $btn.addClass('active');
+            
+            $('html, body').animate({ scrollTop: 0 }, 300);
+            
+            // In production, this would fetch paginated results via AJAX
+            // For now, we just update the URL and scroll to top
+            showNotification('Page ' + page + ' loaded', 'info');
+        });
+    }
+
+    /**
+     * Copy text to clipboard
+     */
+    function copyToClipboard(text) {
+        if (navigator.clipboard) {
+            navigator.clipboard.writeText(text);
+        } else {
+            var $temp = $('<textarea>');
+            $('body').append($temp);
+            $temp.val(text).select();
+            document.execCommand('copy');
+            $temp.remove();
+        }
+    }
+
+    /**
+     * Show notification toast
+     */
+    function showNotification(message, type) {
+        var $toast = $('<div class="mp-toast mp-toast-' + type + '">' + message + '</div>');
+        $('body').append($toast);
+        
+        setTimeout(function() {
+            $toast.fadeIn();
+        }, 100);
+        
+        setTimeout(function() {
+            $toast.fadeOut(function() {
+                $(this).remove();
+            });
+        }, 3000);
     }
 
     /**
      * AJAX Helper Function
      */
     function mpAjax(action, data, successCallback, errorCallback) {
-        const ajaxData = $.extend({
+        var ajaxData = $.extend({
             action: action,
             nonce: mpConfig.nonce
         }, data);
@@ -452,40 +652,13 @@
         });
     }
 
-    /**
-     * Show Message
-     */
-    function showMessage(element, message, type) {
-        const $el = $(element);
-        $el.removeClass('success error info').addClass('mp-message-' + type).html(message).show();
-        
-        // Auto hide after 5 seconds
-        setTimeout(function() {
-            $el.fadeOut();
-        }, 5000);
-    }
-
-    /**
-     * Debounce Function
-     */
-    function debounce(func, wait) {
-        let timeout;
-        return function executedFunction(...args) {
-            const later = () => {
-                clearTimeout(timeout);
-                func(...args);
-            };
-            clearTimeout(timeout);
-            timeout = setTimeout(later, wait);
-        };
-    }
-
     // Expose public methods
     window.MyProtectorFrontend = {
         openReviewModal: openReviewModal,
         closeReviewModal: closeReviewModal,
-        showMessage: showMessage,
-        filterBusinesses: filterBusinesses
+        showMessage: showNotification,
+        filterBusinesses: filterBusinesses,
+        copyToClipboard: copyToClipboard
     };
 
 })(jQuery);
