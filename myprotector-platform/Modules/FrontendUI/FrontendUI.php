@@ -74,6 +74,7 @@ class FrontendUI extends Module {
         'business-dashboard' => 'pages/page-business-dashboard.php',
         'reseller-dashboard' => 'pages/page-reseller-dashboard.php',
         'contact' => 'pages/page-contact.php',
+        'business' => 'business.php',
     ];
 
     /**
@@ -542,11 +543,20 @@ class FrontendUI extends Module {
         $this->addAction('wp_ajax_mp_contact_form', [$this, 'handleContactForm']);
         $this->addAction('wp_ajax_nopriv_mp_contact_form', [$this, 'handleContactForm']);
         
-        // Add rewrite rules for frontend pages
-        $this->addAction('init', [$this, 'addRewriteRules']);
-        
-        // Handle template include
-        $this->addFilter('template_include', [$this, 'handleTemplateInclude']);
+        // Add query vars filter
+        $this->addFilter('query_vars', [$this, 'addQueryVars']);
+    }
+    
+    /**
+     * Add custom query vars
+     * 
+     * @param array $vars
+     * @return array
+     */
+    public function addQueryVars(array $vars): array {
+        $vars[] = 'mp_page';
+        $vars[] = 'mp_slug';
+        return $vars;
     }
 
     /**
@@ -555,6 +565,13 @@ class FrontendUI extends Module {
      * @return void
      */
     public function enqueueAssets(): void {
+        global $wp_query;
+        
+        // Only load on our custom pages
+        if (!isset($wp_query->query_vars['mp_page'])) {
+            return;
+        }
+        
         // Enqueue CSS
         wp_enqueue_style(
             'mp-frontend-ui',
@@ -601,21 +618,55 @@ class FrontendUI extends Module {
      * @return void
      */
     public function addRewriteRules(): void {
+        // Front page - use a specific query var
+        add_rewrite_rule('^$', 'index.php?mp_page=home', 'top');
+        
+        // Dashboard pages
         add_rewrite_rule('^dashboard/?$', 'index.php?mp_page=dashboard', 'top');
         add_rewrite_rule('^business-dashboard/?$', 'index.php?mp_page=business-dashboard', 'top');
         add_rewrite_rule('^reseller-dashboard/?$', 'index.php?mp_page=reseller-dashboard', 'top');
+        
+        // Directory and business
         add_rewrite_rule('^businesses/?$', 'index.php?mp_page=businesses', 'top');
         add_rewrite_rule('^business/([^/]+)/?$', 'index.php?mp_page=business&mp_slug=$matches[1]', 'top');
+        
+        // Auth pages
         add_rewrite_rule('^login/?$', 'index.php?mp_page=login', 'top');
         add_rewrite_rule('^register/?$', 'index.php?mp_page=register', 'top');
+        
+        // Static pages
         add_rewrite_rule('^about/?$', 'index.php?mp_page=about', 'top');
         add_rewrite_rule('^contact/?$', 'index.php?mp_page=contact', 'top');
         
-        add_filter('query_vars', function($vars) {
+        // Add query vars - ensure they're added
+        add_filter('mp_query_vars', function($vars) {
             $vars[] = 'mp_page';
             $vars[] = 'mp_slug';
             return $vars;
         });
+    }
+    
+    /**
+     * Boot the module - runs during bootstrap
+     * 
+     * @return void
+     */
+    public function boot(): void {
+        // Register rewrite rules on init (early)
+        add_action('init', [$this, 'initRewriteRules'], 1);
+        
+        // High priority template include
+        add_filter('template_include', [$this, 'handleTemplateInclude'], 1);
+    }
+    
+    /**
+     * Initialize rewrite rules on init
+     * 
+     * @return void
+     */
+    public function initRewriteRules(): void {
+        $this->addRewriteRules();
+        flush_rewrite_rules(false);
     }
 
     /**
@@ -625,7 +676,14 @@ class FrontendUI extends Module {
      * @return string
      */
     public function handleTemplateInclude($template) {
-        $mp_page = get_query_var('mp_page');
+        global $wp_query;
+        
+        // Check if our query var is set
+        if (!isset($wp_query->query_vars['mp_page'])) {
+            return $template;
+        }
+        
+        $mp_page = $wp_query->query_vars['mp_page'];
         
         if (empty($mp_page)) {
             return $template;
@@ -636,6 +694,15 @@ class FrontendUI extends Module {
         if ($template_file) {
             $template_path = $this->getPath('templates/' . $template_file);
             if (file_exists($template_path)) {
+                // Force 200 status
+                status_header(200);
+                nocache_headers();
+                
+                // For business page, also get slug
+                if ($mp_page === 'business' && isset($wp_query->query_vars['mp_slug'])) {
+                    $GLOBALS['mp_business_slug'] = $wp_query->query_vars['mp_slug'];
+                }
+                
                 return $template_path;
             }
         }
