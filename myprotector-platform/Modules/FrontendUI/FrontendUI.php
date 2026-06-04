@@ -3,6 +3,7 @@
  * MyProtector Platform - Frontend UI Module
  * 
  * Frontend UI components with real database integration
+ * Production-ready page templates with WordPress theme integration
  * 
  * @package MyProtector\Modules\FrontendUI
  * @version 1.0.0
@@ -50,6 +51,23 @@ class FrontendUI extends Module {
      * @var TrafficSignalService
      */
     protected $trafficService;
+
+    /**
+     * Page template routes
+     * 
+     * @var array
+     */
+    protected $page_routes = [
+        'home' => 'pages/page-home.php',
+        'about' => 'pages/page-about.php',
+        'businesses' => 'pages/page-directory.php',
+        'login' => 'pages/page-login.php',
+        'register' => 'pages/page-register.php',
+        'dashboard' => 'pages/page-dashboard.php',
+        'business-dashboard' => 'pages/page-business-dashboard.php',
+        'reseller-dashboard' => 'pages/page-reseller-dashboard.php',
+        'contact' => 'pages/page-contact.php',
+    ];
 
     /**
      * Mock data for development/fallback
@@ -359,6 +377,120 @@ class FrontendUI extends Module {
 
         // Register shortcodes
         $this->registerShortcodes();
+
+        // Initialize page routing
+        $this->initPageRouting();
+    }
+
+    /**
+     * Initialize page routing for WordPress templates
+     * 
+     * @return void
+     */
+    protected function initPageRouting(): void {
+        // Add filter to load page templates
+        $this->addFilter('template_include', [$this, 'handlePageTemplate'], 10, 1);
+        
+        // Add rewrite rules for frontend pages
+        $this->addAction('init', [$this, 'addRewriteRules']);
+    }
+
+    /**
+     * Add rewrite rules for frontend pages
+     * 
+     * @return void
+     */
+    public function addRewriteRules(): void {
+        // Flush rules only once on activation
+        $rules_key = 'mp_flush_rewrite_rules';
+        if (get_option($rules_key)) {
+            flush_rewrite_rules();
+            delete_option($rules_key);
+        }
+
+        // Add custom rewrite rules
+        add_rewrite_rule(
+            '^dashboard/?$',
+            'index.php?mp_page=dashboard',
+            'top'
+        );
+        add_rewrite_rule(
+            '^business-dashboard/?$',
+            'index.php?mp_page=business-dashboard',
+            'top'
+        );
+        add_rewrite_rule(
+            '^reseller-dashboard/?$',
+            'index.php?mp_page=reseller-dashboard',
+            'top'
+        );
+        add_rewrite_rule(
+            '^businesses/?$',
+            'index.php?mp_page=businesses',
+            'top'
+        );
+        add_rewrite_rule(
+            '^about/?$',
+            'index.php?mp_page=about',
+            'top'
+        );
+        add_rewrite_rule(
+            '^contact/?$',
+            'index.php?mp_page=contact',
+            'top'
+        );
+
+        // Register query var
+        add_filter('query_vars', function($vars) {
+            $vars[] = 'mp_page';
+            return $vars;
+        });
+    }
+
+    /**
+     * Handle page template loading
+     * 
+     * @param string $template
+     * @return string
+     */
+    public function handlePageTemplate(string $template): string {
+        $mp_page = get_query_var('mp_page');
+        
+        if (empty($mp_page) || !isset($this->page_routes[$mp_page])) {
+            return $template;
+        }
+
+        // Get the page template path
+        $page_template = $this->getPath('templates/' . $this->page_routes[$mp_page]);
+        
+        if (file_exists($page_template)) {
+            return $page_template;
+        }
+
+        return $template;
+    }
+
+    /**
+     * Render a page template
+     * 
+     * @param string $page
+     * @return string
+     */
+    public function renderPage(string $page): string {
+        if (!isset($this->page_routes[$page])) {
+            return '';
+        }
+
+        $template_path = $this->getPath('templates/' . $this->page_routes[$page]);
+        
+        if (!file_exists($template_path)) {
+            return '';
+        }
+
+        // Capture output
+        ob_start();
+        include $template_path;
+        return ob_get_clean();
     }
 
     /**
@@ -397,6 +529,53 @@ class FrontendUI extends Module {
         $this->addAction('wp_ajax_nopriv_mp_ajax_lost_password', [$this, 'ajaxLostPassword']);
         $this->addAction('wp_ajax_mp_ajax_reset_password', [$this, 'ajaxResetPassword']);
         $this->addAction('wp_ajax_nopriv_mp_ajax_reset_password', [$this, 'ajaxResetPassword']);
+        
+        // Contact form handler
+        $this->addAction('wp_ajax_mp_contact_form', [$this, 'handleContactForm']);
+        $this->addAction('wp_ajax_nopriv_mp_contact_form', [$this, 'handleContactForm']);
+    }
+
+    /**
+     * Handle contact form submission
+     * 
+     * @return void
+     */
+    public function handleContactForm(): void {
+        check_ajax_referer('mp_frontend_nonce', 'nonce');
+        
+        $name = sanitize_text_field($_POST['name'] ?? '');
+        $email = sanitize_email($_POST['email'] ?? '');
+        $subject = sanitize_text_field($_POST['subject'] ?? '');
+        $message = sanitize_textarea_field($_POST['message'] ?? '');
+        
+        if (empty($name) || empty($email) || empty($subject) || empty($message)) {
+            wp_send_json_error(['message' => __('All fields are required.', 'myprotector-platform')]);
+        }
+        
+        if (!is_email($email)) {
+            wp_send_json_error(['message' => __('Please enter a valid email address.', 'myprotector-platform')]);
+        }
+        
+        $to = defined('MYPROTECTOR_SUPPORT_EMAIL') ? MYPROTECTOR_SUPPORT_EMAIL : get_option('admin_email');
+        $email_subject = sprintf('[MyProtector Contact] %s', $subject);
+        
+        $body = sprintf(
+            "Name: %s\nEmail: %s\nSubject: %s\n\nMessage:\n%s",
+            $name,
+            $email,
+            $subject,
+            $message
+        );
+        
+        $headers = ['Reply-To: ' . $email];
+        
+        $sent = wp_mail($to, $email_subject, $body, $headers);
+        
+        if ($sent) {
+            wp_send_json_success(['message' => __('Thank you for your message. We will get back to you soon.', 'myprotector-platform')]);
+        } else {
+            wp_send_json_error(['message' => __('Unable to send message. Please try again later.', 'myprotector-platform')]);
+        }
     }
     /**
      * Render business profile page
@@ -950,18 +1129,18 @@ class FrontendUI extends Module {
             null
         );
 
-        // Main stylesheet
+        // Main stylesheet (production CSS)
         wp_enqueue_style(
             'mp-frontend-ui',
-            $this->getUrl('assets/css/style.css'),
+            $this->getUrl('assets/css/frontend.css'),
             [],
             MYPROTECTOR_VERSION
         );
 
-        // Main JavaScript
+        // Main JavaScript (production JS)
         wp_enqueue_script(
             'mp-frontend-ui',
-            $this->getUrl('assets/js/app.js'),
+            $this->getUrl('assets/js/frontend.js'),
             ['jquery'],
             MYPROTECTOR_VERSION,
             true
@@ -970,9 +1149,10 @@ class FrontendUI extends Module {
         // Localize script
         $company_url = defined('MYPROTECTOR_COMPANY_URL') ? MYPROTECTOR_COMPANY_URL : home_url();
         
-        wp_localize_script('mp-frontend-ui', 'mpFrontend', [
+        wp_localize_script('mp-frontend-ui', 'mpFrontendConfig', [
             'ajaxUrl' => admin_url('admin-ajax.php'),
             'nonce' => wp_create_nonce('mp_frontend_nonce'),
+            'companyUrl' => $company_url,
             'strings' => [
                 'loading' => __('Loading...', 'myprotector-platform'),
                 'error' => __('Something went wrong. Please try again.', 'myprotector-platform'),
@@ -982,10 +1162,14 @@ class FrontendUI extends Module {
             'urls' => [
                 'home' => $company_url,
                 'dashboard' => $company_url . '/dashboard',
+                'businessDashboard' => $company_url . '/business-dashboard',
+                'resellerDashboard' => $company_url . '/reseller-dashboard',
                 'login' => $company_url . '/login',
                 'register' => $company_url . '/register',
                 'businessProfile' => $company_url . '/business',
                 'about' => $company_url . '/about',
+                'contact' => $company_url . '/contact',
+                'businesses' => $company_url . '/businesses',
             ],
             'mockData' => $this->mock_data,
         ]);
