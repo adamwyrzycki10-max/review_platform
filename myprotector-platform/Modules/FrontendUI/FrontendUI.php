@@ -65,17 +65,24 @@ class FrontendUI extends Module {
      * @var array
      */
     protected $page_routes = [
-        'home' => 'pages/page-home.php',
-        'about' => 'pages/page-about.php',
+        'home'      => 'pages/page-home.php',
+        'about'     => 'pages/page-about.php',
         'businesses' => 'pages/page-directory.php',
-        'login' => 'pages/page-login.php',
-        'register' => 'pages/page-register.php',
+        'login'     => 'pages/page-login.php',
+        'register'  => 'pages/page-register.php',
         'dashboard' => 'pages/page-dashboard.php',
         'business-dashboard' => 'pages/page-business-dashboard.php',
-        'reseller-dashboard' => 'pages/page-reseller-dashboard.php',
-        'contact' => 'pages/page-contact.php',
-        'business' => 'business.php',
+        'reseller-dashboard'  => 'pages/page-reseller-dashboard.php',
+        'contact'   => 'pages/page-contact.php',
+        'business'  => 'business.php',
     ];
+
+    /**
+     * Rewrite rules registered flag (for debug)
+     * 
+     * @var bool
+     */
+    protected static $rewrite_rules_registered = false;
 
     /**
      * Mock data for development/fallback
@@ -378,8 +385,44 @@ class FrontendUI extends Module {
      * @return void
      */
     public function boot(): void {
-        // Only initialize on init hook (WordPress is fully loaded)
-        add_action('init', [$this, 'initOnFirstLoad'], 1);
+        // FIX BUG #1: Register activation hook at load time, NOT inside init callback
+        // This must be done OUTSIDE of any hooks - at plugin load time
+        register_activation_hook(MYPROTECTOR_BASENAME, [$this, 'onPluginActivate']);
+        register_deactivation_hook(MYPROTECTOR_BASENAME, [$this, 'onPluginDeactivate']);
+        
+        // FIX BUG #2: Register ALL hooks at init time, not just setupRouting
+        // Use priority 0 for query_vars to register BEFORE rewrite rules are processed
+        add_action('init', [$this, 'initOnFirstLoad'], 0);  // Changed from priority 1 to 0
+    }
+
+    /**
+     * Plugin activation handler
+     * 
+     * @return void
+     */
+    public function onPluginActivate(): void {
+        // Create pages on activation
+        $this->createPages();
+        
+        // Flush rewrite rules ONCE on activation
+        // Don't call flush_rewrite_rules() here - use option to trigger it later
+        update_option('mp_flush_rewrite_rules', true);
+        
+        // Debug log
+        error_log('[MyProtector] FrontendUI: Plugin activated, pages created, rewrite rules flagged for flush');
+    }
+    
+    /**
+     * Plugin deactivation handler
+     * 
+     * @return void
+     */
+    public function onPluginDeactivate(): void {
+        // Clear flush flag
+        delete_option('mp_flush_rewrite_rules');
+        
+        // Debug log
+        error_log('[MyProtector] FrontendUI: Plugin deactivated, cleanup complete');
     }
 
     /**
@@ -388,6 +431,21 @@ class FrontendUI extends Module {
      * @return void
      */
     public function initOnFirstLoad(): void {
+        // FIX BUG #3: Check for flush flag from activation
+        if (get_option('mp_flush_rewrite_rules')) {
+            delete_option('mp_flush_rewrite_rules');
+            // Call flush_rewrite_rules() ONCE after all hooks are registered
+            // We do this by setting a flag for the next request
+            set_transient('mp_flush_rules_on_next_request', true, 60);
+        }
+        
+        // Check if we need to flush rewrite rules this request
+        if (get_transient('mp_flush_rules_on_next_request')) {
+            delete_transient('mp_flush_rules_on_next_request');
+            // Add action to flush after WordPress is done loading
+            add_action('shutdown', 'flush_rewrite_rules');
+        }
+        
         // Initialize models only when WordPress is ready
         if (!isset($this->_initialized)) {
             $this->reviewModel = new ReviewModel();
@@ -397,24 +455,62 @@ class FrontendUI extends Module {
             // Register shortcodes
             $this->registerShortcodes();
 
-            // Initialize page routing
-            $this->initPageRouting();
+            // FIX BUG #4: Initialize routing ONCE per page load
+            // setupRouting() now handles EVERYTHING in one place
+            $this->setupRouting();
             
             $this->_initialized = true;
         }
     }
 
     /**
-     * Initialize page routing for WordPress templates
+     * Setup routing on WordPress init
+     * 
+     * All routing hooks are registered here in ONE place to ensure
+     * they all fire at the correct priorities and in the correct order.
      * 
      * @return void
      */
-    protected function initPageRouting(): void {
-        // Create pages on plugin activation
-        register_activation_hook(MYPROTECTOR_BASENAME, [$this, 'createPages']);
+    public function setupRouting(): void {
+        // FIX BUG #5: Register query_vars at PRIORITY 0 (before rewrite rules)
+        // This ensures our custom query vars are available when WordPress
+        // processes the URL and matches rewrite rules
+        add_filter('query_vars', [$this, 'addQueryVars'], 0);
         
-        // Setup routing on init
-        $this->setupRouting();
+        // FIX BUG #6: Register ALL rewrite rules in ONE place
+        // Do NOT call addRewriteRules() separately - call it directly here
+        $this->addRewriteRules();
+        
+        // FIX BUG #7: Handle template loading with correct priority
+        // Priority 1 means this runs EARLY but still after other plugins
+        add_filter('template_include', [$this, 'handleTemplateInclude'], 1);
+        
+        // FIX BUG #8: Handle page content override at lower priority
+        // Priority 1 means we run early to override theme content
+        add_filter('the_content', [$this, 'overridePageContent'], 1);
+        
+        // Debug: Log that routing was set up
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('[MyProtector] FrontendUI: setupRouting() completed at priority 0');
+        }
+    }
+    
+    /**
+     * Add custom query vars to WordPress
+     * 
+     * @param array $vars
+     * @return array
+     */
+    public function addQueryVars(array $vars): array {
+        $vars[] = 'mp_page';
+        $vars[] = 'mp_slug';
+        
+        // Debug: Log registered vars
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('[MyProtector] FrontendUI: addQueryVars() - mp_page and mp_slug registered');
+        }
+        
+        return $vars;
     }
 
     /**
@@ -424,53 +520,39 @@ class FrontendUI extends Module {
      */
     public function createPages(): void {
         $pages = [
-            'home' => ['title' => 'MyProtector Home', 'slug' => 'home'],
+            'home'      => ['title' => 'MyProtector Home', 'slug' => 'home'],
             'businesses' => ['title' => 'Businesses', 'slug' => 'businesses'],
-            'login' => ['title' => 'Login', 'slug' => 'login'],
-            'register' => ['title' => 'Register', 'slug' => 'register'],
+            'login'     => ['title' => 'Login', 'slug' => 'login'],
+            'register'  => ['title' => 'Register', 'slug' => 'register'],
             'dashboard' => ['title' => 'Dashboard', 'slug' => 'dashboard'],
-            'about' => ['title' => 'About', 'slug' => 'about'],
-            'contact' => ['title' => 'Contact', 'slug' => 'contact'],
+            'about'     => ['title' => 'About', 'slug' => 'about'],
+            'contact'   => ['title' => 'Contact', 'slug' => 'contact'],
         ];
         
+        $pages_created = 0;
         foreach ($pages as $key => $page) {
             // Check if page already exists
             $existing = get_page_by_path($page['slug']);
             if (!$existing) {
                 wp_insert_post([
-                    'post_title' => $page['title'],
-                    'post_name' => $page['slug'],
-                    'post_status' => 'publish',
-                    'post_type' => 'page',
+                    'post_title'   => $page['title'],
+                    'post_name'    => $page['slug'],
+                    'post_status'  => 'publish',
+                    'post_type'    => 'page',
                 ]);
+                $pages_created++;
             }
         }
         
-        // Flush rewrite rules
-        flush_rewrite_rules();
-    }
-
-    /**
-     * Setup routing on WordPress init
-     * 
-     * @return void
-     */
-    public function setupRouting(): void {
-        // Add query vars - make sure they're registered
-        add_filter('query_vars', function($vars) {
-            $vars[] = 'mp_page';
-            $vars[] = 'mp_slug';
-            return $vars;
-        });
+        // FIX BUG: Don't call flush_rewrite_rules() here!
+        // The activation handler will schedule a flush instead.
+        // Calling flush_rewrite_rules() during activation can cause issues
+        // if other plugins haven't registered their hooks yet.
         
-        // Add rewrite rules
-        $this->addRewriteRules();
-        
-        // Handle template loading - use earlier priority
-        add_filter('template_include', [$this, 'handleTemplateInclude'], 1);
-        
-        // Handle page content - late priority to override theme content
-        add_filter('the_content', [$this, 'overridePageContent'], 1);
+        // Debug log
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log(sprintf('[MyProtector] FrontendUI: createPages() - %d pages created', $pages_created));
+        }
     }
 
     /**
@@ -504,11 +586,29 @@ class FrontendUI extends Module {
     public function handleTemplateInclude($template) {
         global $wp_query;
         
+        // FIX BUG: Add debug logging to prove query vars are available
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            $query_vars = $wp_query->query_vars;
+            error_log(sprintf(
+                '[MyProtector] FrontendUI: handleTemplateInclude() - query_vars: %s',
+                print_r($query_vars, true)
+            ));
+        }
+        
         // Check if our query var is set
         $mp_page = isset($wp_query->query_vars['mp_page']) ? $wp_query->query_vars['mp_page'] : '';
         
         if (empty($mp_page)) {
+            // Debug: no mp_page found
+            if (defined('WP_DEBUG') && WP_DEBUG) {
+                error_log('[MyProtector] FrontendUI: No mp_page in query_vars, returning original template');
+            }
             return $template;
+        }
+        
+        // Debug: mp_page found
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log(sprintf('[MyProtector] FrontendUI: mp_page=%s, looking for template', $mp_page));
         }
         
         // For custom routes, use a minimal template
@@ -516,10 +616,36 @@ class FrontendUI extends Module {
         
         if ($template_file) {
             $template_path = $this->getPath('templates/' . $template_file);
+            
             if (file_exists($template_path)) {
+                // Debug: template found
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log(sprintf('[MyProtector] FrontendUI: Loading template %s', $template_path));
+                }
+                
                 status_header(200);
                 nocache_headers();
                 return $template_path;
+            } else {
+                // FIX BUG: If template doesn't exist, show an error instead of silently failing
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    error_log(sprintf('[MyProtector] FrontendUI: Template not found: %s', $template_path));
+                }
+                
+                // Return a minimal fallback template or show error
+                $fallback_path = $this->getPath('templates/pages/page-error.php');
+                if (file_exists($fallback_path)) {
+                    return $fallback_path;
+                }
+                
+                // Last resort: show WordPress debug
+                if (defined('WP_DEBUG') && WP_DEBUG) {
+                    wp_die(sprintf(
+                        'MyProtector: Template file not found for route "%s" at path: %s',
+                        esc_html($mp_page),
+                        esc_html($template_path)
+                    ));
+                }
             }
         }
         
@@ -598,15 +724,30 @@ class FrontendUI extends Module {
      * @return void
      */
     public function addRewriteRules(): void {
+        // FIX BUG: Don't add duplicate query_vars filter here!
+        // It's already registered in setupRouting() via addQueryVars()
+        // Adding it here causes the filter to be registered TWICE
+        
+        // Track that we've registered rewrite rules (for debug)
+        self::$rewrite_rules_registered = true;
+        
+        // Debug log
+        if (defined('WP_DEBUG') && WP_DEBUG) {
+            error_log('[MyProtector] FrontendUI: addRewriteRules() - rules registered');
+        }
+        
         // Front page - use a specific query var
+        // IMPORTANT: '^$' only matches empty path (site root) when permalinks are enabled
+        // For full front-page handling, we need a specific rule
         add_rewrite_rule('^$', 'index.php?mp_page=home', 'top');
         
-        // Dashboard pages
+        // Dashboard pages - these need to be BEFORE generic rules
         add_rewrite_rule('^dashboard/?$', 'index.php?mp_page=dashboard', 'top');
         add_rewrite_rule('^business-dashboard/?$', 'index.php?mp_page=business-dashboard', 'top');
         add_rewrite_rule('^reseller-dashboard/?$', 'index.php?mp_page=reseller-dashboard', 'top');
         
-        // Directory and business
+        // Directory and business profile
+        // Note: 'business/' with trailing slash matches business/TechVentures-Solutions/
         add_rewrite_rule('^businesses/?$', 'index.php?mp_page=businesses', 'top');
         add_rewrite_rule('^business/([^/]+)/?$', 'index.php?mp_page=business&mp_slug=$matches[1]', 'top');
         
@@ -617,13 +758,6 @@ class FrontendUI extends Module {
         // Static pages
         add_rewrite_rule('^about/?$', 'index.php?mp_page=about', 'top');
         add_rewrite_rule('^contact/?$', 'index.php?mp_page=contact', 'top');
-        
-        // Add query vars for mp_page and mp_slug
-        add_filter('query_vars', function($vars) {
-            $vars[] = 'mp_page';
-            $vars[] = 'mp_slug';
-            return $vars;
-        });
     }
 
     /**
