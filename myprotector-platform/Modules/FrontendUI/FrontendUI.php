@@ -378,16 +378,30 @@ class FrontendUI extends Module {
      * @return void
      */
     public function boot(): void {
-        // Initialize models
-        $this->reviewModel = new ReviewModel();
-        $this->businessModel = new BusinessModel();
-        $this->trafficService = new TrafficSignalService();
+        // Only initialize on init hook (WordPress is fully loaded)
+        add_action('init', [$this, 'initOnFirstLoad'], 1);
+    }
 
-        // Register shortcodes
-        $this->registerShortcodes();
+    /**
+     * Initialize on first load - runs once on init
+     * 
+     * @return void
+     */
+    public function initOnFirstLoad(): void {
+        // Initialize models only when WordPress is ready
+        if (!isset($this->_initialized)) {
+            $this->reviewModel = new ReviewModel();
+            $this->businessModel = new BusinessModel();
+            $this->trafficService = new TrafficSignalService();
 
-        // Initialize page routing
-        $this->initPageRouting();
+            // Register shortcodes
+            $this->registerShortcodes();
+
+            // Initialize page routing
+            $this->initPageRouting();
+            
+            $this->_initialized = true;
+        }
     }
 
     /**
@@ -399,8 +413,8 @@ class FrontendUI extends Module {
         // Create pages on plugin activation
         register_activation_hook(MYPROTECTOR_BASENAME, [$this, 'createPages']);
         
-        // Register everything on init hook
-        add_action('init', [$this, 'setupRouting'], 1);
+        // Setup routing on init
+        $this->setupRouting();
     }
 
     /**

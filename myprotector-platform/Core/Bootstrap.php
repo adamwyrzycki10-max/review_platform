@@ -45,6 +45,16 @@ class Bootstrap {
             }
         }
     }
+    
+    /**
+     * Boot modules on init hook
+     * 
+     * @return void
+     */
+    public function bootModulesOnInit(): void {
+        $this->bootModules();
+        $this->onInit();
+    }
 
     /**
      * Register all plugin hooks
@@ -74,8 +84,8 @@ class Bootstrap {
      * @return void
      */
     protected function registerCoreHooks(): void {
-        // Initialize hook
-        add_action('init', [$this, 'onInit'], 1);
+        // Initialize hook - boot modules after WordPress is loaded
+        add_action('init', [$this, 'bootModulesOnInit'], 1);
         
         // Widgets init
         add_action('widgets_init', [$this, 'onWidgetsInit'], 10);
@@ -96,6 +106,11 @@ class Bootstrap {
      * @return void
      */
     public function onInit(): void {
+        // Skip if already ran - we're calling it directly now
+        if (did_action('init') > 1) {
+            return;
+        }
+        
         // Check WordPress version
         $this->checkWordPressVersion();
         
