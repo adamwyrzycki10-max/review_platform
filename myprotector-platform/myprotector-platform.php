@@ -28,6 +28,10 @@ require_once __DIR__ . '/myprotector-platform-loader.php';
 register_activation_hook(__FILE__, function () {
     require_once __DIR__ . '/Core/Activator.php';
     \MyProtector\Core\Activator::activate();
+    
+    // FIX: Trigger FrontendUI page creation on activation
+    // This runs during plugin activation, before any other hooks
+    do_action('mp_frontend_create_pages');
 });
 
 // Register deactivation hook
@@ -43,7 +47,6 @@ function myprotector(): MyProtector {
     return MyProtector::getInstance();
 }
 
-
 // Load Frontend UI Module
 $frontend_ui = plugin_dir_path(__FILE__) . 'Modules/FrontendUI/FrontendUI.php';
 
@@ -51,5 +54,5 @@ if (file_exists($frontend_ui)) {
     require_once $frontend_ui;
 }
 
-// Initialize
+// Initialize - AFTER FrontendUI is loaded
 myprotector()->run();

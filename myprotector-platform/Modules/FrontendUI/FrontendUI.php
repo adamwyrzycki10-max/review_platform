@@ -385,14 +385,14 @@ class FrontendUI extends Module {
      * @return void
      */
     public function boot(): void {
-        // FIX BUG #1: Register activation hook at load time, NOT inside init callback
-        // This must be done OUTSIDE of any hooks - at plugin load time
-        register_activation_hook(MYPROTECTOR_BASENAME, [$this, 'onPluginActivate']);
-        register_deactivation_hook(MYPROTECTOR_BASENAME, [$this, 'onPluginDeactivate']);
+        // Register hook to create pages on plugin activation
+        // The main plugin file triggers 'mp_frontend_create_pages' during activation
+        add_action('mp_frontend_create_pages', [$this, 'createPages']);
         
-        // FIX BUG #2: Register ALL hooks at init time, not just setupRouting
-        // Use priority 0 for query_vars to register BEFORE rewrite rules are processed
-        add_action('init', [$this, 'initOnFirstLoad'], 0);  // Changed from priority 1 to 0
+        // CRITICAL FIX: Since we hook into init at priority 0, init is ALREADY running
+        // when boot() is called. So we MUST directly call initOnFirstLoad() here,
+        // NOT add another init action (it would be too late).
+        $this->initOnFirstLoad();
     }
 
     /**

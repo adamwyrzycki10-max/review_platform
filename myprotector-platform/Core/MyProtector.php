@@ -87,12 +87,23 @@ class MyProtector {
         // Register modules
         $this->registerModules();
         
-        // Boot all modules on init hook (after WordPress is loaded)
-        if ($this->bootstrap) {
-            add_action('init', function() {
+        // Add init hook at priority 0 to boot modules FIRST
+        // This ensures modules can register their hooks before WordPress processes requests
+        add_action('init', function() {
+            if ($this->bootstrap) {
                 $this->bootstrap->bootModulesOnInit();
-            }, 1);
-            
+            }
+        }, 0);
+        
+        // Bootstrap init handler at priority 1
+        add_action('init', function() {
+            if ($this->bootstrap) {
+                $this->bootstrap->onInit();
+            }
+        }, 1);
+        
+        // Register core hooks (can be at default priority)
+        if ($this->bootstrap) {
             $this->bootstrap->registerHooks();
             $this->bootstrap->initRestApi();
             $this->bootstrap->registerShortcodes();
