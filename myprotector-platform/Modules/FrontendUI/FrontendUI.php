@@ -396,18 +396,89 @@ class FrontendUI extends Module {
      * @return void
      */
     protected function initPageRouting(): void {
-        // Register custom query vars
+        // Create pages on plugin activation
+        register_activation_hook(MYPROTECTOR_BASENAME, [$this, 'createPages']);
+        
+        // Register everything on init hook
+        add_action('init', [$this, 'setupRouting'], 1);
+    }
+
+    /**
+     * Create frontend pages on plugin activation
+     * 
+     * @return void
+     */
+    public function createPages(): void {
+        $pages = [
+            'home' => ['title' => 'MyProtector Home', 'slug' => 'home'],
+            'businesses' => ['title' => 'Businesses', 'slug' => 'businesses'],
+            'login' => ['title' => 'Login', 'slug' => 'login'],
+            'register' => ['title' => 'Register', 'slug' => 'register'],
+            'dashboard' => ['title' => 'Dashboard', 'slug' => 'dashboard'],
+            'about' => ['title' => 'About', 'slug' => 'about'],
+            'contact' => ['title' => 'Contact', 'slug' => 'contact'],
+        ];
+        
+        foreach ($pages as $key => $page) {
+            // Check if page already exists
+            $existing = get_page_by_path($page['slug']);
+            if (!$existing) {
+                wp_insert_post([
+                    'post_title' => $page['title'],
+                    'post_name' => $page['slug'],
+                    'post_status' => 'publish',
+                    'post_type' => 'page',
+                ]);
+            }
+        }
+        
+        // Flush rewrite rules
+        flush_rewrite_rules();
+    }
+
+    /**
+     * Setup routing on WordPress init
+     * 
+     * @return void
+     */
+    public function setupRouting(): void {
+        // Add query vars - make sure they're registered
         add_filter('query_vars', function($vars) {
             $vars[] = 'mp_page';
             $vars[] = 'mp_slug';
             return $vars;
         });
         
-        // Add rewrite rules on init
-        add_action('init', [$this, 'addRewriteRules'], 1);
+        // Add rewrite rules
+        $this->addRewriteRules();
         
-        // Handle template loading
+        // Handle template loading - use earlier priority
         add_filter('template_include', [$this, 'handleTemplateInclude'], 1);
+        
+        // Handle page content - late priority to override theme content
+        add_filter('the_content', [$this, 'overridePageContent'], 1);
+    }
+
+    /**
+     * Override page content for our custom pages
+     * 
+     * @param string $content
+     * @return string
+     */
+    public function overridePageContent($content) {
+        global $post;
+        
+        if (!is_page() || !$post) {
+            return $content;
+        }
+        
+        $page_slugs = ['home', 'businesses', 'login', 'register', 'dashboard', 'about', 'contact'];
+        
+        if (in_array($post->post_name, $page_slugs)) {
+            return $this->renderPage($post->post_name);
+        }
+        
+        return $content;
     }
 
     /**
@@ -426,6 +497,7 @@ class FrontendUI extends Module {
             return $template;
         }
         
+        // For custom routes, use a minimal template
         $template_file = $this->page_routes[$mp_page] ?? null;
         
         if ($template_file) {
