@@ -396,33 +396,47 @@ class FrontendUI extends Module {
      * @return void
      */
     protected function initPageRouting(): void {
-        // Add filter to load page templates
-        $this->addFilter('template_include', [$this, 'handlePageTemplate'], 10, 1);
+        // Register custom query vars
+        add_filter('query_vars', function($vars) {
+            $vars[] = 'mp_page';
+            $vars[] = 'mp_slug';
+            return $vars;
+        });
         
-        // Add rewrite rules for frontend pages
-        $this->addAction('init', [$this, 'addRewriteRules']);
+        // Add rewrite rules on init
+        add_action('init', [$this, 'addRewriteRules'], 1);
+        
+        // Handle template loading
+        add_filter('template_include', [$this, 'handleTemplateInclude'], 1);
     }
 
     /**
-     * Handle page template loading
+     * Handle template include for custom pages
      * 
      * @param string $template
      * @return string
      */
-    public function handlePageTemplate(string $template): string {
-        $mp_page = get_query_var('mp_page');
+    public function handleTemplateInclude($template) {
+        global $wp_query;
         
-        if (empty($mp_page) || !isset($this->page_routes[$mp_page])) {
+        // Check if our query var is set
+        $mp_page = isset($wp_query->query_vars['mp_page']) ? $wp_query->query_vars['mp_page'] : '';
+        
+        if (empty($mp_page)) {
             return $template;
         }
-
-        // Get the page template path
-        $page_template = $this->getPath('templates/' . $this->page_routes[$mp_page]);
         
-        if (file_exists($page_template)) {
-            return $page_template;
+        $template_file = $this->page_routes[$mp_page] ?? null;
+        
+        if ($template_file) {
+            $template_path = $this->getPath('templates/' . $template_file);
+            if (file_exists($template_path)) {
+                status_header(200);
+                nocache_headers();
+                return $template_path;
+            }
         }
-
+        
         return $template;
     }
 
@@ -490,21 +504,6 @@ class FrontendUI extends Module {
         // Contact form handler
         $this->addAction('wp_ajax_mp_contact_form', [$this, 'handleContactForm']);
         $this->addAction('wp_ajax_nopriv_mp_contact_form', [$this, 'handleContactForm']);
-        
-        // Add query vars filter
-        $this->addFilter('query_vars', [$this, 'addQueryVars']);
-    }
-    
-    /**
-     * Add custom query vars
-     * 
-     * @param array $vars
-     * @return array
-     */
-    public function addQueryVars(array $vars): array {
-        $vars[] = 'mp_page';
-        $vars[] = 'mp_slug';
-        return $vars;
     }
 
     /**
@@ -539,47 +538,6 @@ class FrontendUI extends Module {
             $vars[] = 'mp_slug';
             return $vars;
         });
-    }
-
-    /**
-     * Handle template include for custom pages
-     * 
-     * @param string $template
-     * @return string
-     */
-    public function handleTemplateInclude($template) {
-        global $wp_query;
-        
-        // Check if our query var is set
-        if (!isset($wp_query->query_vars['mp_page'])) {
-            return $template;
-        }
-        
-        $mp_page = $wp_query->query_vars['mp_page'];
-        
-        if (empty($mp_page)) {
-            return $template;
-        }
-        
-        $template_file = $this->page_routes[$mp_page] ?? null;
-        
-        if ($template_file) {
-            $template_path = $this->getPath('templates/' . $template_file);
-            if (file_exists($template_path)) {
-                // Force 200 status
-                status_header(200);
-                nocache_headers();
-                
-                // For business page, also get slug
-                if ($mp_page === 'business' && isset($wp_query->query_vars['mp_slug'])) {
-                    $GLOBALS['mp_business_slug'] = $wp_query->query_vars['mp_slug'];
-                }
-                
-                return $template_path;
-            }
-        }
-        
-        return $template;
     }
 
     /**
