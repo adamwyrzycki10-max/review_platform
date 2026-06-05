@@ -18,7 +18,33 @@ define('MYPROTECTOR_SLUG', 'myprotector-platform');
 
 // Plugin Names
 define('MYPROTECTOR_PLUGIN_NAME', 'MyProtector Platform');
-define('MYPROTECTOR_PLUGIN_DESC', 'Trustpilot-style review platform for WordPress');
+define('MYPROTECTOR_PLUGIN_DESC', 'Trust verification platform for businesses - Protect, Verify, Trust');
+
+// Company Information - UPDATE THESE WITH REAL VALUES
+define('MYPROTECTOR_COMPANY_NAME', 'MyProtec LLC');
+define('MYPROTECTOR_COMPANY_ADDRESS', '123 Verification Way, Suite 100, San Francisco, CA 94102');
+define('MYPROTECTOR_COMPANY_EMAIL', 'contact@myprotector.com');
+define('MYPROTECTOR_COMPANY_PHONE', '+1 (555) 123-4567');
+define('MYPROTECTOR_COMPANY_URL', 'https://myprotector.com');
+define('MYPROTECTOR_SUPPORT_URL', 'https://myprotector.com/support');
+define('MYPROTECTOR_PRIVACY_URL', 'https://myprotector.com/privacy');
+define('MYPROTECTOR_TERMS_URL', 'https://myprotector.com/terms');
+
+// Social Media Links
+define('MYPROTECTOR_SOCIAL_LINKEDIN', 'https://linkedin.com/company/myprotector');
+define('MYPROTECTOR_SOCIAL_TWITTER', 'https://twitter.com/myprotector');
+define('MYPROTECTOR_SOCIAL_INSTAGRAM', 'https://instagram.com/myprotector');
+define('MYPROTECTOR_SOCIAL_FACEBOOK', 'https://facebook.com/myprotector');
+define('MYPROTECTOR_SOCIAL_YOUTUBE', 'https://youtube.com/@myprotector');
+
+// Founder/Team Information
+define('MYPROTECTOR_FOUNDER_NAME', 'Adam Wyrzycki');
+define('MYPROTECTOR_FOUNDER_TITLE', 'Co-Founder & Lead Developer');
+define('MYPROTECTOR_FOUNDER_LINKEDIN', 'https://linkedin.com/in/adamwyrzycki');
+define('MYPROTECTOR_FOUNDER_EMAIL', 'adam@myprotector.com');
+define('MYPROTECTOR_COFOUNDER_NAME', 'Co-Founder Name');
+define('MYPROTECTOR_COFOUNDER_TITLE', 'Co-Founder & CEO');
+define('MYPROTECTOR_COFOUNDER_LINKEDIN', 'https://linkedin.com/in/cofounder');
 
 // Environment
 define('MYPROTECTOR_DEBUG', defined('WP_DEBUG') && WP_DEBUG);
@@ -48,8 +74,8 @@ define('MYPROTECTOR_MINIFY_ASSETS', !MYPROTECTOR_DEBUG);
 define('MYPROTECTOR_ASSETS_INLINE_LIMIT', 5000);
 
 // Trust Score Thresholds
-define('MYPROTECTOR_TRUST_MIN_REVIEWS', 50);
-define('MYPROTECTOR_TRUST_MIN_RATING', 4.5);
+define('MYPROTECTOR_TRUST_MIN_REVIEWS', 10);
+define('MYPROTECTOR_TRUST_MIN_RATING', 4.0);
 define('MYPROTECTOR_TRUST_REVIEW_WEIGHT', 0.6);
 define('MYPROTECTOR_TRUST_RESPONSE_WEIGHT', 0.2);
 define('MYPROTECTOR_TRUST_DOCUMENT_WEIGHT', 0.2);

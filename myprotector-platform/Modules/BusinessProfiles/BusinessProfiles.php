@@ -118,13 +118,15 @@ class BusinessProfiles extends Module {
      * @return void
      */
     protected function initControllers(): void {
-        // Admin controller
-        if (is_admin()) {
+        // Admin controller - only instantiate when in admin context AND WP is loaded
+        if (is_admin() && function_exists('wp_get_current_user')) {
             $this->adminController = new Admin\BusinessAdminController($this);
         }
         
-        // Public controller
-        $this->publicController = new Public\BusinessPublicController($this);
+        // Public controller - only when frontend is being rendered
+        if (!wp_doing_ajax() || (isset($_REQUEST['action']) && strpos($_REQUEST['action'], 'mp_') === 0)) {
+            $this->publicController = new Public\BusinessPublicController($this);
+        }
     }
 
     /**

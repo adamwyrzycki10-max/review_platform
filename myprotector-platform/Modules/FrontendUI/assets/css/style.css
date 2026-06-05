@@ -1606,3 +1606,139 @@
         font-size: var(--mp-font-size-2xl);
     }
 }
+
+/* ============================================
+   TOAST NOTIFICATIONS
+   ============================================ */
+
+.mp-toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: var(--mp-spacing-md) var(--mp-spacing-xl);
+    background: var(--mp-gray-800);
+    color: var(--mp-white);
+    border-radius: var(--mp-radius-lg);
+    box-shadow: var(--mp-shadow-xl);
+    z-index: 99999;
+    font-size: var(--mp-font-size-sm);
+    animation: mp-toast-in 0.3s ease;
+}
+
+.mp-toast-success {
+    background: var(--mp-green);
+    color: #fff;
+}
+
+.mp-toast-error {
+    background: var(--mp-red);
+    color: #fff;
+}
+
+.mp-toast-info {
+    background: var(--mp-info);
+    color: #fff;
+}
+
+@keyframes mp-toast-in {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes mp-toast-out {
+    from {
+        opacity: 1;
+        transform: translateY(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+}
+
+/* ============================================
+   REVIEW MODAL IMPROVEMENTS
+   ============================================ */
+
+.mp-modal-open {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+}
+
+.mp-review-modal .mp-modal-content {
+    max-width: 500px;
+    width: 90%;
+}
+
+/* ============================================
+   LOADING SPINNER
+   ============================================ */
+
+.mp-spinner {
+    display: inline-block;
+    width: 16px;
+    height: 16px;
+    border: 2px solid rgba(255, 255, 255, 0.3);
+    border-radius: 50%;
+    border-top-color: #fff;
+    animation: mp-spin 0.8s linear infinite;
+    margin-right: 8px;
+    vertical-align: middle;
+}
+
+@keyframes mp-spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ============================================
+   UTILITY CLASSES
+   ============================================ */
+
+.mp-hidden {
+    display: none !important;
+}
+
+.mp-show {
+    display: block !important;
+}
+
+.mp-flex {
+    display: flex;
+}
+
+.mp-items-center {
+    align-items: center;
+}
+
+.mp-justify-between {
+    justify-content: space-between;
+}
+
+.mp-gap-sm {
+    gap: var(--mp-spacing-sm);
+}
+
+.mp-gap-md {
+    gap: var(--mp-spacing-md);
+}
+
+.mp-mb-sm {
+    margin-bottom: var(--mp-spacing-sm);
+}
+
+.mp-mb-lg {
+    margin-bottom: var(--mp-spacing-lg);
+}
+
+.mp-text-center {
+    text-align: center;
+}

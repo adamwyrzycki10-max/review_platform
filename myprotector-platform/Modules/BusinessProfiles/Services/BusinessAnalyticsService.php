@@ -12,13 +12,12 @@ namespace MyProtector\Modules\BusinessProfiles\Services;
 
 use MyProtector\Modules\BusinessProfiles\Models\Company;
 use MyProtector\Modules\BusinessProfiles\Repositories\CompanyRepository;
-use MyProtector\Core\Services\Container\ServiceContainer;
 
 class BusinessAnalyticsService {
     /**
      * Service container
      * 
-     * @var ServiceContainer
+     * @var array
      */
     protected $container;
 
@@ -32,9 +31,9 @@ class BusinessAnalyticsService {
     /**
      * Constructor
      * 
-     * @param ServiceContainer $container
+     * @param array $container
      */
-    public function __construct(ServiceContainer $container) {
+    public function __construct($container = []) {
         $this->container = $container;
         $this->repository = new CompanyRepository();
     }

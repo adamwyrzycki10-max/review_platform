@@ -84,27 +84,41 @@ class MyProtector {
      * @return void
      */
     public function run(): void {
-        // Load plugin textdomain
-        $this->loadTextdomain();
-        
         // Register modules
         $this->registerModules();
         
-        // Boot all modules
+        // Add init hook at priority 0 to boot modules FIRST
+        // This ensures modules can register their hooks before WordPress processes requests
+        add_action('init', function() {
+            if ($this->bootstrap) {
+                $this->bootstrap->bootModulesOnInit();
+            }
+        }, 0);
+        
+        // Bootstrap init handler at priority 1
+        add_action('init', function() {
+            if ($this->bootstrap) {
+                $this->bootstrap->onInit();
+            }
+        }, 1);
+        
+        // Register core hooks (can be at default priority)
         if ($this->bootstrap) {
-            $this->bootstrap->bootModules();
             $this->bootstrap->registerHooks();
             $this->bootstrap->initRestApi();
             $this->bootstrap->registerShortcodes();
         }
+        
+        // Load textdomain on init hook (must be at init or later)
+        add_action('init', [$this, 'loadTextdomainDelayed'], 1);
     }
 
     /**
-     * Load plugin textdomain
+     * Load plugin textdomain (delayed until init hook)
      * 
      * @return void
      */
-    protected function loadTextdomain(): void {
+    public function loadTextdomainDelayed(): void {
         if (function_exists('load_plugin_textdomain')) {
             load_plugin_textdomain(
                 'myprotector-platform',
@@ -131,7 +145,7 @@ class MyProtector {
             'MyProtector\\Modules\\WooCommerce\\WooCommerce',
             'MyProtector\\Modules\\Admin\\Admin',
             'MyProtector\\Modules\\FrontendUI\\FrontendUI',
-            'MyProtector\\Modules\\Trustignals\\TrustSignals',
+            'MyProtector\\Modules\\TrustSignals\\TrustSignals',
         ];
 
         foreach ($moduleClasses as $moduleClass) {

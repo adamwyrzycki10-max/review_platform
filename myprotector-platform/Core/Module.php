@@ -61,6 +61,34 @@ abstract class Module implements ModuleInterface {
     protected $services = [];
 
     /**
+     * Service container
+     * 
+     * @var array
+     */
+    protected $container = [];
+
+    /**
+     * Module initialization state
+     * 
+     * @var bool
+     */
+    protected $_initialized = false;
+
+    /**
+     * Admin controller instance
+     * 
+     * @var object|null
+     */
+    protected ?object $adminController = null;
+
+    /**
+     * Public controller instance
+     * 
+     * @var object|null
+     */
+    protected ?object $publicController = null;
+
+    /**
      * Constructor
      * 
      * @param MyProtector $plugin
@@ -68,6 +96,7 @@ abstract class Module implements ModuleInterface {
     public function __construct(MyProtector $plugin) {
         $this->path = MYPROTECTOR_PATH . 'Modules/' . $this->getModuleDirectory() . '/';
         $this->url = MYPROTECTOR_URL . 'Modules/' . $this->getModuleDirectory() . '/';
+        $this->container = $plugin->getContainer();
     }
 
     /**

@@ -40,9 +40,9 @@ class BusinessService {
     /**
      * Constructor
      * 
-     * @param ServiceContainer $container
+     * @param ServiceContainer|array|null $container
      */
-    public function __construct(ServiceContainer $container) {
+    public function __construct($container = null) {
         $this->container = $container;
         $this->repository = new CompanyRepository();
         $this->validator = new BusinessValidator();

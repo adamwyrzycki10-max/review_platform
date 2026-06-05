@@ -45,6 +45,16 @@ class Bootstrap {
             }
         }
     }
+    
+    /**
+     * Boot modules on init hook
+     * 
+     * @return void
+     */
+    public function bootModulesOnInit(): void {
+        $this->bootModules();
+        $this->onInit();
+    }
 
     /**
      * Register all plugin hooks
@@ -74,9 +84,6 @@ class Bootstrap {
      * @return void
      */
     protected function registerCoreHooks(): void {
-        // Initialize hook
-        add_action('init', [$this, 'onInit'], 1);
-        
         // Widgets init
         add_action('widgets_init', [$this, 'onWidgetsInit'], 10);
         
@@ -96,6 +103,11 @@ class Bootstrap {
      * @return void
      */
     public function onInit(): void {
+        // Skip if already ran - we're calling it directly now
+        if (did_action('init') > 1) {
+            return;
+        }
+        
         // Check WordPress version
         $this->checkWordPressVersion();
         
@@ -145,33 +157,9 @@ class Bootstrap {
      * @return void
      */
     public function registerApiRoutes(): void {
-        // Reviews API
-        register_rest_route(MYPROTECTOR_API_NAMESPACE, '/reviews', [
-            'methods'  => 'GET',
-            'callback' => [$this, 'getReviews'],
-            'permission_callback' => '__return_true',
-        ]);
-
-        register_rest_route(MYPROTECTOR_API_NAMESPACE, '/reviews', [
-            'methods'  => 'POST',
-            'callback' => [$this, 'createReview'],
-            'permission_callback' => function() {
-                return is_user_logged_in();
-            },
-        ]);
-
-        // Companies API
-        register_rest_route(MYPROTECTOR_API_NAMESPACE, '/companies', [
-            'methods'  => 'GET',
-            'callback' => [$this, 'getCompanies'],
-            'permission_callback' => '__return_true',
-        ]);
-
-        register_rest_route(MYPROTECTOR_API_NAMESPACE, '/companies/(?P<id>\d+)', [
-            'methods'  => 'GET',
-            'callback' => [$this, 'getCompany'],
-            'permission_callback' => '__return_true',
-        ]);
+        // Use the API Controller for all routes
+        $apiController = new \MyProtector\Controllers\ApiController();
+        $apiController->registerRoutes();
     }
 
     /**

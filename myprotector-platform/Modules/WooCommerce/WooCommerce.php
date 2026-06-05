@@ -51,6 +51,10 @@ class WooCommerce extends Module {
     }
 
     protected function createSubscriptionProduct(): void {
+        if (!$this->isWooCommerceActive()) {
+            return;
+        }
+        
         $product_id = get_option('mp_woocommerce_subscription_product_id', 0);
         
         if (!$product_id || !get_post($product_id)) {
@@ -60,6 +64,10 @@ class WooCommerce extends Module {
     }
 
     protected function createProduct(): int {
+        if (!class_exists('WC_Product_Subscription')) {
+            return 0;
+        }
+        
         $product = new \WC_Product_Subscription();
         $product->set_name('MyProtector Business Subscription');
         $product->set_status('publish');
